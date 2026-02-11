@@ -2,6 +2,7 @@
   "name": "preventive-ai-healthcare",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "Preventive AI System for Detecting Disease-Associated Behavioral Drift from Face and Voice",
   "scripts": {
     "dev": "vite",

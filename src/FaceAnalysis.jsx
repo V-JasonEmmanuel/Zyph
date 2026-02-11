@@ -2,10 +2,13 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { FaceMesh } from '@mediapipe/face_mesh';
 import { Camera } from '@mediapipe/camera_utils';
 
-const FaceAnalysis = ({ onRiskScore, onMetrics } = {}) => {
+const FaceAnalysis = ({ onRiskScore, onMetrics, startSignal, initialSource = 'live', language = 'en' } = {}) => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisSource, setAnalysisSource] = useState(initialSource);
+  const [sampleVideoUrl, setSampleVideoUrl] = useState('');
+  const [sampleError, setSampleError] = useState('');
   const [metrics, setMetrics] = useState({
     blinkRate: 0,
     gazeDeviation: 0,
@@ -18,6 +21,8 @@ const FaceAnalysis = ({ onRiskScore, onMetrics } = {}) => {
   const [blinkRateBpm, setBlinkRateBpm] = useState(0);
   const faceMeshRef = useRef(null);
   const cameraRef = useRef(null);
+  const animationRef = useRef(null);
+  const sampleUrlRef = useRef(null);
   const eyeClosedRef = useRef(false);
   const lastBlinkTsRef = useRef(0);
   const blinkTimestampsRef = useRef([]);
@@ -254,26 +259,47 @@ const FaceAnalysis = ({ onRiskScore, onMetrics } = {}) => {
       canvasCtx.restore();
     });
 
-    const camera = new Camera(videoRef.current, {
-      onFrame: async () => {
-        if (videoRef.current && isAnalyzing) {
-          await faceMesh.send({ image: videoRef.current });
-        }
-      },
-      width: 640,
-      height: 480
-    });
+    const startVideoProcessing = () => {
+      if (analysisSource === 'live') {
+        const camera = new Camera(videoRef.current, {
+          onFrame: async () => {
+            if (videoRef.current && isAnalyzing) {
+              await faceMesh.send({ image: videoRef.current });
+            }
+          },
+          width: 640,
+          height: 480
+        });
+
+        cameraRef.current = camera;
+        camera.start();
+      } else {
+        const processFrame = async () => {
+          if (!videoRef.current || !faceMeshRef.current || !isAnalyzing) return;
+          if (videoRef.current.readyState >= 2) {
+            await faceMeshRef.current.send({ image: videoRef.current });
+          }
+          animationRef.current = requestAnimationFrame(processFrame);
+        };
+
+        animationRef.current = requestAnimationFrame(processFrame);
+      }
+    };
 
     faceMeshRef.current = faceMesh;
-    cameraRef.current = camera;
-
-    camera.start();
+    startVideoProcessing();
 
     return () => {
-      camera.stop();
+      if (cameraRef.current) {
+        cameraRef.current.stop();
+        cameraRef.current = null;
+      }
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
       faceMesh.close();
       faceMeshRef.current = null;
-      cameraRef.current = null;
       prevKeypointsRef.current = null;
       eyeClosedRef.current = false;
       lastBlinkTsRef.current = 0;
@@ -281,14 +307,80 @@ const FaceAnalysis = ({ onRiskScore, onMetrics } = {}) => {
       setLandmarks([]);
       setBlinkRateBpm(0);
     };
-  }, [isAnalyzing, updateBlinkAndGetBpm, calculateGazeDeviation, calculateFacialAsymmetry, calculateExpressivity, calculateTremorIndicators, calculateRiskScore, onRiskScore, onMetrics]);
+  }, [isAnalyzing, analysisSource, updateBlinkAndGetBpm, calculateGazeDeviation, calculateFacialAsymmetry, calculateExpressivity, calculateTremorIndicators, calculateRiskScore, onRiskScore, onMetrics]);
 
-  const startAnalysis = () => {
+  const t = (en, ta) => (language === 'ta' ? ta : en);
+
+  const startAnalysis = useCallback(() => {
+    if (isAnalyzing) return;
+    if (analysisSource === 'sample' && !sampleVideoUrl) {
+      setSampleError(t('Please upload a sample video first.', 'முதலில் மாதிரி வீடியோவை பதிவேற்றவும்.'));
+      return;
+    }
+    setSampleError('');
     setIsAnalyzing(true);
+    if (analysisSource === 'sample' && videoRef.current) {
+      videoRef.current.play().catch(() => {});
+    }
+  }, [analysisSource, isAnalyzing, sampleVideoUrl, language]);
+
+  const stopAnalysis = useCallback(() => {
+    setIsAnalyzing(false);
+    if (cameraRef.current) {
+      cameraRef.current.stop();
+      cameraRef.current = null;
+    }
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
+    if (videoRef.current) {
+      if (analysisSource === 'sample') {
+        videoRef.current.pause();
+      }
+      const stream = videoRef.current.srcObject;
+      if (stream && typeof stream.getTracks === 'function') {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+      videoRef.current.srcObject = null;
+    }
+  }, [analysisSource]);
+
+  useEffect(() => {
+    if (startSignal == null) return;
+    if (!isAnalyzing) {
+      startAnalysis();
+    }
+  }, [startSignal, isAnalyzing, startAnalysis]);
+
+  useEffect(() => {
+    return () => {
+      if (sampleUrlRef.current) {
+        URL.revokeObjectURL(sampleUrlRef.current);
+        sampleUrlRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleSourceChange = (nextSource) => {
+    if (nextSource === analysisSource) return;
+    setAnalysisSource(nextSource);
+    setSampleError('');
+    if (isAnalyzing) {
+      setIsAnalyzing(false);
+    }
   };
 
-  const stopAnalysis = () => {
-    setIsAnalyzing(false);
+  const handleSampleFileChange = (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    if (sampleUrlRef.current) {
+      URL.revokeObjectURL(sampleUrlRef.current);
+    }
+    const url = URL.createObjectURL(file);
+    sampleUrlRef.current = url;
+    setSampleVideoUrl(url);
+    setSampleError('');
   };
 
   const getRiskLevel = (score) => {
@@ -304,20 +396,67 @@ const FaceAnalysis = ({ onRiskScore, onMetrics } = {}) => {
     <div className="min-h-screen bg-gray-900 text-white p-8">
       <div className="max-w-6xl mx-auto">
         <h1 className="text-4xl font-bold mb-8 text-center">
-          Preventive AI - Face Analysis System
+          {t('Preventive AI - Face Analysis System', 'Preventive AI - முக பகுப்பாய்வு அமைப்பு')}
         </h1>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Video and Canvas */}
           <div className="space-y-4">
             <div className="bg-gray-800 rounded-lg p-4">
-              <h2 className="text-xl font-semibold mb-4">Camera Feed</h2>
+              <div className="flex flex-col gap-3 mb-4">
+                <h2 className="text-xl font-semibold">
+                  {analysisSource === 'live'
+                    ? t('Camera Feed', 'கேமரா நேரடி காட்சி')
+                    : t('Sample Video Preview', 'மாதிரி வீடியோ முன்னோட்டம்')}
+                </h2>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => handleSourceChange('live')}
+                    className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
+                      analysisSource === 'live'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+                    }`}
+                  >
+                    {t('Live Tracking', 'நேரடி கண்காணிப்பு')}
+                  </button>
+                  <button
+                    onClick={() => handleSourceChange('sample')}
+                    className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
+                      analysisSource === 'sample'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+                    }`}
+                  >
+                    {t('Sample Video', 'மாதிரி வீடியோ')}
+                  </button>
+                </div>
+                {analysisSource === 'sample' && (
+                  <div>
+                    <label className="block text-sm text-gray-300 mb-2">
+                      {t('Upload video', 'வீடியோ பதிவேற்று')}
+                    </label>
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={handleSampleFileChange}
+                      className="block w-full text-sm text-gray-300 file:mr-4 file:rounded-full file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-white hover:file:bg-blue-700"
+                    />
+                    {sampleError && (
+                      <p className="text-sm text-red-400 mt-2">{sampleError}</p>
+                    )}
+                  </div>
+                )}
+              </div>
               <video
                 ref={videoRef}
+                src={analysisSource === 'sample' ? sampleVideoUrl : undefined}
                 className="w-full rounded-lg"
                 style={{ transform: 'scaleX(-1)' }}
                 autoPlay
                 playsInline
+                loop={analysisSource === 'sample'}
+                controls={analysisSource === 'sample'}
                 muted
               />
               <canvas
@@ -335,14 +474,14 @@ const FaceAnalysis = ({ onRiskScore, onMetrics } = {}) => {
                 disabled={isAnalyzing}
                 className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-6 py-3 rounded-lg font-semibold transition-colors"
               >
-                {isAnalyzing ? 'Analyzing...' : 'Start Analysis'}
+                {isAnalyzing ? t('Analyzing...', 'பகுப்பாய்வு நடக்கிறது') : t('Start Analysis', 'பகுப்பாய்வு தொடங்கு')}
               </button>
               <button
                 onClick={stopAnalysis}
                 disabled={!isAnalyzing}
                 className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 px-6 py-3 rounded-lg font-semibold transition-colors"
               >
-                Stop Analysis
+                {t('Stop Analysis', 'நிறுத்து')}
               </button>
             </div>
           </div>
@@ -350,7 +489,7 @@ const FaceAnalysis = ({ onRiskScore, onMetrics } = {}) => {
           {/* Metrics Display */}
           <div className="space-y-4">
             <div className="bg-gray-800 rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">Real-time Metrics</h2>
+              <h2 className="text-xl font-semibold mb-4">{t('Real-time Metrics', 'நேரடி அளவுகள்')}</h2>
               
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
@@ -422,7 +561,7 @@ const FaceAnalysis = ({ onRiskScore, onMetrics } = {}) => {
             
             {/* Risk Score */}
             <div className="bg-gray-800 rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">Risk Assessment</h2>
+              <h2 className="text-xl font-semibold mb-4">{t('Risk Assessment', 'அபாய மதிப்பீடு')}</h2>
               <div className="text-center">
                 <div className="text-6xl font-bold mb-2">{riskScore.toFixed(1)}</div>
                 <div className={`text-2xl font-semibold ${riskInfo.color}`}>
@@ -439,7 +578,7 @@ const FaceAnalysis = ({ onRiskScore, onMetrics } = {}) => {
             
             {/* Disease Indicators */}
             <div className="bg-gray-800 rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">Disease Pattern Analysis</h2>
+              <h2 className="text-xl font-semibold mb-4">{t('Disease Pattern Analysis', 'நோய் வித பகுப்பாய்வு')}</h2>
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-300">Parkinson's Indicators:</span>

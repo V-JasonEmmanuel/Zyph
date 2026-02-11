@@ -1,7 +1,8 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 
-const VoiceAnalysis = () => {
+const VoiceAnalysis = ({ onRiskScore, onMetrics, startSignal, language = 'en' } = {}) => {
   const [isRecording, setIsRecording] = useState(false);
+    const t = (en, ta) => (language === 'ta' ? ta : en);
   const [audioData, setAudioData] = useState([]);
   const [voiceMetrics, setVoiceMetrics] = useState({
     pitchVariation: 0,
@@ -137,7 +138,8 @@ const VoiceAnalysis = () => {
   }, []);
 
   // Start recording
-  const startRecording = async () => {
+  const startRecording = useCallback(async () => {
+    if (isRecording) return;
     try {
       initAudioContext();
       
@@ -197,7 +199,10 @@ const VoiceAnalysis = () => {
           };
           
           setVoiceMetrics(newMetrics);
-          setVoiceRiskScore(calculateVoiceRiskScore(newMetrics));
+          const newRisk = calculateVoiceRiskScore(newMetrics);
+          setVoiceRiskScore(newRisk);
+          if (typeof onMetrics === 'function') onMetrics(newMetrics);
+          if (typeof onRiskScore === 'function') onRiskScore(newRisk);
         }
         
         // Update visualization data
@@ -214,7 +219,18 @@ const VoiceAnalysis = () => {
       console.error('Error accessing microphone:', error);
       alert('Please allow microphone access to use voice analysis');
     }
-  };
+  }, [
+    isRecording,
+    initAudioContext,
+    calculatePitch,
+    calculateMonotonicity,
+    calculateSpeechRate,
+    calculatePauseDuration,
+    calculateEmotionalValence,
+    calculateVoiceRiskScore,
+    onMetrics,
+    onRiskScore
+  ]);
 
   // Stop recording
   const stopRecording = () => {
@@ -239,6 +255,13 @@ const VoiceAnalysis = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (startSignal == null) return;
+    if (!isRecording) {
+      startRecording();
+    }
+  }, [startSignal, isRecording, startRecording]);
+
   const getVoiceRiskLevel = (score) => {
     if (score < 20) return { level: 'Low', color: 'text-green-400' };
     if (score < 40) return { level: 'Moderate', color: 'text-yellow-400' };
@@ -252,14 +275,14 @@ const VoiceAnalysis = () => {
     <div className="min-h-screen bg-gray-900 text-white p-8">
       <div className="max-w-6xl mx-auto">
         <h1 className="text-4xl font-bold mb-8 text-center">
-          Preventive AI - Voice Analysis System
+          {t('Preventive AI - Voice Analysis System', 'Preventive AI - குரல் பகுப்பாய்வு அமைப்பு')}
         </h1>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Audio Visualization */}
           <div className="space-y-4">
             <div className="bg-gray-800 rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">Audio Waveform</h2>
+              <h2 className="text-xl font-semibold mb-4">{t('Audio Waveform', 'ஒலி அலைவடிவம்')}</h2>
               <div className="h-64 bg-gray-900 rounded-lg flex items-center justify-center">
                 {isRecording ? (
                   <svg width="100%" height="100%" viewBox="0 0 400 256">
@@ -282,7 +305,7 @@ const VoiceAnalysis = () => {
                 ) : (
                   <div className="text-gray-500 text-center">
                     <div className="text-6xl mb-4">🎤</div>
-                    <p>Click "Start Recording" to begin voice analysis</p>
+                    <p>{t('Click "Start Recording" to begin voice analysis', 'குரல் பகுப்பாய்வை தொடங்க "Start Recording" ஐ அழுத்தவும்')}</p>
                   </div>
                 )}
               </div>
@@ -303,14 +326,14 @@ const VoiceAnalysis = () => {
                 disabled={isRecording}
                 className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-6 py-3 rounded-lg font-semibold transition-colors"
               >
-                {isRecording ? 'Recording...' : 'Start Recording'}
+                {isRecording ? t('Recording...', 'பதிவு நடக்கிறது') : t('Start Recording', 'பதிவை தொடங்கு')}
               </button>
               <button
                 onClick={stopRecording}
                 disabled={!isRecording}
                 className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 px-6 py-3 rounded-lg font-semibold transition-colors"
               >
-                Stop Recording
+                {t('Stop Recording', 'நிறுத்து')}
               </button>
             </div>
           </div>
@@ -318,7 +341,7 @@ const VoiceAnalysis = () => {
           {/* Voice Metrics */}
           <div className="space-y-4">
             <div className="bg-gray-800 rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">Voice Metrics</h2>
+              <h2 className="text-xl font-semibold mb-4">{t('Voice Metrics', 'குரல் அளவுகள்')}</h2>
               
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
@@ -390,7 +413,7 @@ const VoiceAnalysis = () => {
             
             {/* Voice Risk Score */}
             <div className="bg-gray-800 rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">Voice Risk Assessment</h2>
+              <h2 className="text-xl font-semibold mb-4">{t('Voice Risk Assessment', 'குரல் அபாய மதிப்பீடு')}</h2>
               <div className="text-center">
                 <div className="text-6xl font-bold mb-2">{voiceRiskScore.toFixed(1)}</div>
                 <div className={`text-2xl font-semibold ${voiceRiskInfo.color}`}>
@@ -404,7 +427,7 @@ const VoiceAnalysis = () => {
             
             {/* Voice Disease Indicators */}
             <div className="bg-gray-800 rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">Voice Disease Patterns</h2>
+              <h2 className="text-xl font-semibold mb-4">{t('Voice Disease Patterns', 'குரல் நோய் விதங்கள்')}</h2>
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-300">Parkinson's Voice:</span>
