@@ -4,7 +4,7 @@ import VoiceAnalysis from './VoiceAnalysis';
 import DemoSection from './DemoSection';
 
 const CombinedAnalysis = () => {
-  const [activeTab, setActiveTab] = useState('face');
+  const [activeTab, setActiveTab] = useState('analysis');
   const [language, setLanguage] = useState('en');
   const [faceRisk, setFaceRisk] = useState(null);
   const [voiceRisk, setVoiceRisk] = useState(null);
@@ -12,8 +12,14 @@ const CombinedAnalysis = () => {
   const [voiceMetrics, setVoiceMetrics] = useState(null);
   const [faceStartSignal, setFaceStartSignal] = useState(0);
   const [voiceStartSignal, setVoiceStartSignal] = useState(0);
+  const [faceStopSignal, setFaceStopSignal] = useState(0);
+  const [voiceStopSignal, setVoiceStopSignal] = useState(0);
+  const [analysisRemaining, setAnalysisRemaining] = useState(0);
+  const [analysisActive, setAnalysisActive] = useState(false);
   const [sequenceStatus, setSequenceStatus] = useState('idle');
   const sequenceTimerRef = useRef(null);
+  const analysisTimerRef = useRef(null);
+  const ANALYSIS_DURATION = 30;
   const [intake, setIntake] = useState({
     age: '',
     diagnosis: '',
@@ -33,8 +39,7 @@ const CombinedAnalysis = () => {
   const t = (en, ta) => (language === 'ta' ? ta : en);
 
   const tabs = [
-    { id: 'face', label: t('Face Analysis', 'முக பகுப்பாய்வு'), icon: '👤' },
-    { id: 'voice', label: t('Voice Analysis', 'குரல் பகுப்பாய்வு'), icon: '🎤' },
+    { id: 'analysis', label: t('Face + Voice', 'முக + குரல்'), icon: '🧩' },
     { id: 'demo', label: t('Demo Mode', 'டெமோ'), icon: '🎭' },
     { id: 'combined', label: t('Combined Assessment', 'ஒருங்கிணைந்த மதிப்பீடு'), icon: '📊' },
     { id: 'about', label: t('About', 'பற்றி'), icon: 'ℹ️' }
@@ -78,7 +83,7 @@ const CombinedAnalysis = () => {
 
   const startCombinedAnalysis = () => {
     setSequenceStatus('face');
-    setActiveTab('face');
+    setActiveTab('analysis');
     setFaceStartSignal((prev) => prev + 1);
 
     if (sequenceTimerRef.current) {
@@ -87,7 +92,7 @@ const CombinedAnalysis = () => {
 
     sequenceTimerRef.current = setTimeout(() => {
       setSequenceStatus('voice');
-      setActiveTab('voice');
+      setActiveTab('analysis');
       setVoiceStartSignal((prev) => prev + 1);
     }, 6000);
   };
@@ -97,9 +102,51 @@ const CombinedAnalysis = () => {
       clearTimeout(sequenceTimerRef.current);
     }
     setSequenceStatus('voice');
-    setActiveTab('voice');
+    setActiveTab('analysis');
     setVoiceStartSignal((prev) => prev + 1);
   };
+
+  const clearAnalysisTimer = () => {
+    if (analysisTimerRef.current) {
+      clearInterval(analysisTimerRef.current);
+      analysisTimerRef.current = null;
+    }
+  };
+
+  const startUnifiedAnalysis = () => {
+    if (sequenceTimerRef.current) {
+      clearTimeout(sequenceTimerRef.current);
+    }
+    clearAnalysisTimer();
+    setSequenceStatus('idle');
+    setAnalysisActive(true);
+    setAnalysisRemaining(ANALYSIS_DURATION);
+    setFaceStartSignal((prev) => prev + 1);
+    setVoiceStartSignal((prev) => prev + 1);
+
+    analysisTimerRef.current = setInterval(() => {
+      setAnalysisRemaining((prev) => Math.max(prev - 1, 0));
+    }, 1000);
+  };
+
+  const stopUnifiedAnalysis = () => {
+    if (sequenceTimerRef.current) {
+      clearTimeout(sequenceTimerRef.current);
+    }
+    clearAnalysisTimer();
+    setAnalysisActive(false);
+    setAnalysisRemaining(0);
+    setSequenceStatus('idle');
+    setFaceStopSignal((prev) => prev + 1);
+    setVoiceStopSignal((prev) => prev + 1);
+  };
+
+  useEffect(() => {
+    if (!analysisActive) return;
+    if (analysisRemaining === 0) {
+      stopUnifiedAnalysis();
+    }
+  }, [analysisActive, analysisRemaining]);
 
   useEffect(() => {
     return () => {
@@ -119,6 +166,10 @@ const CombinedAnalysis = () => {
   const overallRiskInfo = getOverallRiskLevel(combinedRisk.overall ?? 0);
 
   const fmt = (v) => (typeof v === 'number' && Number.isFinite(v) ? v.toFixed(1) : 'N/A');
+  const statusLabel = (value, onLabel, offLabel) => {
+    if (typeof value !== 'number') return 'N/A';
+    return value >= 50 ? onLabel : offLabel;
+  };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -171,23 +222,69 @@ const CombinedAnalysis = () => {
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className={activeTab === 'face' ? 'block' : 'hidden'}>
-          <FaceAnalysis
-            onRiskScore={setFaceRisk}
-            onMetrics={setFaceMetrics}
-            startSignal={faceStartSignal}
-            language={language}
-          />
-        </div>
-        <div className={activeTab === 'voice' ? 'block' : 'hidden'}>
-          <VoiceAnalysis
-            onRiskScore={setVoiceRisk}
-            onMetrics={setVoiceMetrics}
-            startSignal={voiceStartSignal}
-            language={language}
-          />
-        </div>
-        {activeTab === 'demo' && <DemoSection />}
+        {activeTab === 'analysis' && (
+          <div className="space-y-6">
+            <div className="bg-gray-800 rounded-lg p-6">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold">
+                    {t('Live Analysis', 'நேரடி பகுப்பாய்வு')}
+                  </h2>
+                  <p className="text-gray-400">
+                    {t('Start both face and voice analysis together.', 'முகம் மற்றும் குரல் பகுப்பாய்வை ஒரே நேரத்தில் தொடங்குங்கள்.')}
+                  </p>
+                    <p className="text-sm text-gray-400 mt-2">
+                      {analysisActive
+                        ? t(`Time left: ${analysisRemaining}s`, `மீதமுள்ள நேரம்: ${analysisRemaining} வி.`)
+                        : t('Ready to start.', 'தொடங்க தயாராக உள்ளது.')}
+                    </p>
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={startUnifiedAnalysis}
+                    className="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg font-semibold transition-colors"
+                  >
+                    {t('Start Analysis', 'பகுப்பாய்வு தொடங்கு')}
+                  </button>
+                  <button
+                    onClick={stopUnifiedAnalysis}
+                    className="bg-red-600 hover:bg-red-700 px-6 py-3 rounded-lg font-semibold transition-colors"
+                  >
+                    {t('Stop Analysis', 'நிறுத்து')}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <div className="bg-gray-800 rounded-lg p-6">
+                <h3 className="text-xl font-semibold mb-4">{t('Face Analysis', 'முக பகுப்பாய்வு')}</h3>
+                <FaceAnalysis
+                  onRiskScore={setFaceRisk}
+                  onMetrics={setFaceMetrics}
+                  startSignal={faceStartSignal}
+                  stopSignal={faceStopSignal}
+                  language={language}
+                  hideControls
+                  embedded
+                />
+              </div>
+              <div className="bg-gray-800 rounded-lg p-6">
+                <h3 className="text-xl font-semibold mb-4">{t('Voice Analysis', 'குரல் பகுப்பாய்வு')}</h3>
+                <VoiceAnalysis
+                  onRiskScore={setVoiceRisk}
+                  onMetrics={setVoiceMetrics}
+                  startSignal={voiceStartSignal}
+                  stopSignal={voiceStopSignal}
+                  language={language}
+                  hideControls
+                  embedded
+                />
+              </div>
+            </div>
+          </div>
+        )}
+        {activeTab === 'demo' && <DemoSection language={language} />}
         
         {activeTab === 'combined' && (
           <div className="space-y-8">
@@ -371,6 +468,32 @@ const CombinedAnalysis = () => {
                   />
                 </div>
               </div>
+
+              <div className="border-t border-gray-700 pt-6">
+                <h3 className="text-lg font-semibold mb-4">
+                  {t('Latest Face Signals', 'சமீபத்திய முக சிக்னல்கள்')}
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-gray-700 rounded-lg p-4">
+                    <div className="text-sm text-gray-300">{t('Head Pose (Yaw)', 'தலை நிலை (Yaw)')}</div>
+                    <div className="text-2xl font-semibold text-cyan-300">
+                      {faceMetrics?.headPoseAngle == null ? 'N/A' : `${faceMetrics.headPoseAngle.toFixed(0)}°`}
+                    </div>
+                  </div>
+                  <div className="bg-gray-700 rounded-lg p-4">
+                    <div className="text-sm text-gray-300">{t('Head Abnormal', 'தலை அசாதாரணம்')}</div>
+                    <div className="text-2xl font-semibold text-yellow-300">
+                      {statusLabel(faceMetrics?.headAbnormal, t('Abnormal', 'அசாதாரணம்'), t('Normal', 'சாதாரணம்'))}
+                    </div>
+                  </div>
+                  <div className="bg-gray-700 rounded-lg p-4">
+                    <div className="text-sm text-gray-300">{t('Gaze Oscillation', 'கண் அசைவு அதிர்வு')}</div>
+                    <div className="text-2xl font-semibold text-pink-300">
+                      {statusLabel(faceMetrics?.gazeOscillation, t('Detected', 'கண்டறியப்பட்டது'), t('Stable', 'நிலையானது'))}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Disease Risk Breakdown */}
@@ -498,15 +621,15 @@ const CombinedAnalysis = () => {
                   <ul className="space-y-2 text-sm">
                     <li className="flex items-start">
                       <span className="text-green-400 mr-2">✓</span>
-                      Schedule comprehensive neurological evaluation
+                      {t('Schedule comprehensive neurological evaluation', 'முழுமையான நரம்பியல் மதிப்பீட்டை திட்டமிடவும்')}
                     </li>
                     <li className="flex items-start">
                       <span className="text-green-400 mr-2">✓</span>
-                      Begin baseline cognitive and motor function testing
+                      {t('Begin baseline cognitive and motor function testing', 'அடிப்படை அறிவாற்றல் மற்றும் இயக்க செயல்பாட்டு பரிசோதனையை தொடங்கவும்')}
                     </li>
                     <li className="flex items-start">
                       <span className="text-green-400 mr-2">✓</span>
-                      Consider referral to movement disorder specialist
+                      {t('Consider referral to movement disorder specialist', 'இயக்கக் கோளாறு நிபுணரிடம் பரிந்துரையை பரிசீலிக்கவும்')}
                     </li>
                   </ul>
                 </div>
@@ -518,15 +641,15 @@ const CombinedAnalysis = () => {
                   <ul className="space-y-2 text-sm">
                     <li className="flex items-start">
                       <span className="text-yellow-400 mr-2">•</span>
-                      Weekly behavioral analysis tracking
+                      {t('Weekly behavioral analysis tracking', 'வாராந்திர நடத்தை பகுப்பாய்வு கண்காணிப்பு')}
                     </li>
                     <li className="flex items-start">
                       <span className="text-yellow-400 mr-2">•</span>
-                      Monthly clinical assessment updates
+                      {t('Monthly clinical assessment updates', 'மாதாந்திர மருத்துவ மதிப்பீட்டு புதுப்பிப்புகள்')}
                     </li>
                     <li className="flex items-start">
                       <span className="text-yellow-400 mr-2">•</span>
-                      Quarterly comprehensive evaluation
+                      {t('Quarterly comprehensive evaluation', 'காலாண்டு முழுமையான மதிப்பீடு')}
                     </li>
                   </ul>
                 </div>

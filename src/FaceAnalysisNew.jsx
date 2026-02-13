@@ -9,7 +9,10 @@ const FaceAnalysis = () => {
     gazeDeviation: 0,
     facialAsymmetry: 0,
     expressivity: 0,
-    tremorIndicators: 0
+    tremorIndicators: 0,
+    headPoseAngle: 0,
+    headAbnormal: 0,
+    gazeOscillation: 0
   });
   const [landmarks, setLandmarks] = useState([]);
   const [riskScore, setRiskScore] = useState(0);
@@ -18,6 +21,11 @@ const FaceAnalysis = () => {
   const [earHistory, setEarHistory] = useState([]);
   const faceMeshRef = useRef(null);
   const cameraRef = useRef(null);
+  const gazeSequenceRef = useRef([]);
+
+  const HEAD_YAW_ALERT_DEG = 10;
+  const GAZE_OSC_THRESHOLD = 0.02;
+  const GAZE_SEQ_LEN = 6;
 
   // Load MediaPipe dynamically
   const loadMediaPipe = useCallback(async () => {
@@ -150,6 +158,60 @@ const FaceAnalysis = () => {
     return Math.min(deviation * 150, 100);
   }, []);
 
+  const calculateHeadPoseApprox = useCallback((landmarks) => {
+    const leftFace = landmarks[234];
+    const rightFace = landmarks[454];
+    const noseTip = landmarks[1];
+
+    if (!leftFace || !rightFace || !noseTip) {
+      return { yawDeg: 0, abnormal: 0 };
+    }
+
+    const leftDist = Math.abs(noseTip.x - leftFace.x);
+    const rightDist = Math.abs(rightFace.x - noseTip.x);
+    const avgDist = (leftDist + rightDist) / 2;
+    if (avgDist === 0) return { yawDeg: 0, abnormal: 0 };
+
+    const ratio = (rightDist - leftDist) / avgDist;
+    const yawDeg = Math.max(-45, Math.min(45, ratio * 45));
+    const abnormal = Math.abs(yawDeg) > HEAD_YAW_ALERT_DEG ? 1 : 0;
+
+    return { yawDeg, abnormal };
+  }, []);
+
+  const detectGazeOscillation = useCallback((landmarks) => {
+    const leftIris = landmarks[468];
+    const rightIris = landmarks[473];
+    const leftEyeLeft = landmarks[33];
+    const leftEyeRight = landmarks[133];
+    const rightEyeLeft = landmarks[362];
+    const rightEyeRight = landmarks[263];
+
+    if (!leftIris || !rightIris || !leftEyeLeft || !leftEyeRight || !rightEyeLeft || !rightEyeRight) {
+      return { oscillation: 0, avgOffset: 0 };
+    }
+
+    const leftEyeCenterX = (leftEyeLeft.x + leftEyeRight.x) / 2;
+    const rightEyeCenterX = (rightEyeLeft.x + rightEyeRight.x) / 2;
+
+    const leftOffset = leftIris.x - leftEyeCenterX;
+    const rightOffset = rightIris.x - rightEyeCenterX;
+    const avgOffset = (leftOffset + rightOffset) / 2;
+
+    const sequence = gazeSequenceRef.current.concat(avgOffset).slice(-GAZE_SEQ_LEN);
+    gazeSequenceRef.current = sequence;
+
+    if (sequence.length < GAZE_SEQ_LEN) {
+      return { oscillation: 0, avgOffset };
+    }
+
+    const maxVal = Math.max(...sequence);
+    const minVal = Math.min(...sequence);
+    const oscillation = maxVal > GAZE_OSC_THRESHOLD && minVal < -GAZE_OSC_THRESHOLD ? 1 : 0;
+
+    return { oscillation, avgOffset };
+  }, []);
+
   // Calculate facial asymmetry
   const calculateFacialAsymmetry = useCallback((landmarks) => {
     const pairs = [
@@ -206,18 +268,24 @@ const FaceAnalysis = () => {
   // Calculate all metrics
   const calculateMetrics = useCallback((faceLandmarks) => {
     detectBlinks(faceLandmarks);
+
+    const { yawDeg, abnormal } = calculateHeadPoseApprox(faceLandmarks);
+    const { oscillation } = detectGazeOscillation(faceLandmarks);
     
     const newMetrics = {
       blinkRate: Math.min((blinkCount / Math.max((Date.now() - lastBlinkTime) / 60000, 0.1)) * 20, 100),
       gazeDeviation: calculateGazeDeviation(faceLandmarks),
       facialAsymmetry: calculateFacialAsymmetry(faceLandmarks),
       expressivity: calculateExpressivity(faceLandmarks),
-      tremorIndicators: calculateTremorIndicators(faceLandmarks)
+      tremorIndicators: calculateTremorIndicators(faceLandmarks),
+      headPoseAngle: yawDeg,
+      headAbnormal: abnormal ? 100 : 0,
+      gazeOscillation: oscillation ? 100 : 0
     };
     
     setMetrics(newMetrics);
     calculateRiskScore(newMetrics);
-  }, [blinkCount, lastBlinkTime, detectBlinks, calculateGazeDeviation, calculateFacialAsymmetry, calculateExpressivity, calculateTremorIndicators]);
+  }, [blinkCount, lastBlinkTime, detectBlinks, calculateHeadPoseApprox, detectGazeOscillation, calculateGazeDeviation, calculateFacialAsymmetry, calculateExpressivity, calculateTremorIndicators]);
 
   // Calculate risk score
   const calculateRiskScore = useCallback((metrics) => {
@@ -226,12 +294,14 @@ const FaceAnalysis = () => {
       gazeDeviation: 0.25,
       facialAsymmetry: 0.25,
       expressivity: 0.15,
-      tremorIndicators: 0.15
+      tremorIndicators: 0.15,
+      headAbnormal: 0.08,
+      gazeOscillation: 0.07
     };
     
     let score = 0;
     Object.keys(weights).forEach(key => {
-      score += metrics[key] * weights[key];
+      score += (metrics[key] || 0) * weights[key];
     });
     
     setRiskScore(Math.min(score, 100));
@@ -243,6 +313,7 @@ const FaceAnalysis = () => {
     setBlinkCount(0);
     setLastBlinkTime(Date.now());
     setEarHistory([]);
+    gazeSequenceRef.current = [];
     await loadMediaPipe();
   }, [loadMediaPipe]);
 
@@ -288,7 +359,6 @@ const FaceAnalysis = () => {
               <video
                 ref={videoRef}
                 className="w-full rounded-lg"
-                style={{ transform: 'scaleX(-1)' }}
                 autoPlay
                 playsInline
               />
@@ -297,7 +367,6 @@ const FaceAnalysis = () => {
                 width={640}
                 height={480}
                 className="w-full rounded-lg mt-4"
-                style={{ transform: 'scaleX(-1)' }}
               />
             </div>
             
@@ -389,6 +458,32 @@ const FaceAnalysis = () => {
                     <span className="text-sm w-12 text-right">{metrics.tremorIndicators.toFixed(0)}%</span>
                   </div>
                 </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-300">Head Pose (Yaw)</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-32 bg-gray-700 rounded-full h-2">
+                      <div 
+                        className="bg-cyan-500 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${Math.min(Math.abs(metrics.headPoseAngle) / 30 * 100, 100)}%` }}
+                      />
+                    </div>
+                    <span className="text-sm w-12 text-right">{metrics.headPoseAngle.toFixed(0)}°</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-300">Gaze Oscillation</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-32 bg-gray-700 rounded-full h-2">
+                      <div 
+                        className="bg-pink-500 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${metrics.gazeOscillation}%` }}
+                      />
+                    </div>
+                    <span className="text-sm w-12 text-right">{metrics.gazeOscillation.toFixed(0)}%</span>
+                  </div>
+                </div>
               </div>
             </div>
             
@@ -405,6 +500,12 @@ const FaceAnalysis = () => {
                 </div>
                 <div className="text-gray-400 mt-1">
                   Blinks detected: {blinkCount}
+                </div>
+                <div className="text-gray-400 mt-1">
+                  Head pose: {metrics.headAbnormal ? 'Abnormal' : 'Normal'}
+                </div>
+                <div className="text-gray-400 mt-1">
+                  Gaze oscillation: {metrics.gazeOscillation ? 'Detected' : 'Stable'}
                 </div>
               </div>
             </div>
