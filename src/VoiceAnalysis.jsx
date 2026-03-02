@@ -1,7 +1,8 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 
-const VoiceAnalysis = () => {
+const VoiceAnalysis = ({ onRiskScore, onMetrics, startSignal, stopSignal, language = 'en', hideControls = false, embedded = false } = {}) => {
   const [isRecording, setIsRecording] = useState(false);
+    const t = (en, ta) => (language === 'ta' ? ta : en);
   const [audioData, setAudioData] = useState([]);
   const [voiceMetrics, setVoiceMetrics] = useState({
     pitchVariation: 0,
@@ -16,6 +17,9 @@ const VoiceAnalysis = () => {
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const animationRef = useRef(null);
+  const lastStartSignalRef = useRef(startSignal);
+  const isRecordingRef = useRef(false);
+  const lastStopSignalRef = useRef(stopSignal);
 
   // Initialize audio context
   const initAudioContext = useCallback(() => {
@@ -115,29 +119,43 @@ const VoiceAnalysis = () => {
 
   // Calculate voice risk score
   const calculateVoiceRiskScore = useCallback((metrics) => {
-    const weights = {
-      pitchVariation: 0.25,
-      speechRate: 0.2,
-      pauseDuration: 0.2,
-      monotonicity: 0.2,
-      emotionalValence: 0.15
+    const clamp01 = (value) => Math.max(0, Math.min(1, value));
+    const riskWhenLow = (value, okAt) => {
+      if (value >= okAt) return 0;
+      return clamp01((okAt - value) / okAt) * 100;
     };
-    
-    let score = 0;
-    Object.keys(weights).forEach(key => {
-      // Inverse some metrics where lower values indicate risk
-      let value = metrics[key];
-      if (key === 'pitchVariation' || key === 'speechRate' || key === 'emotionalValence') {
-        value = 100 - value; // Lower values are riskier
-      }
-      score += value * weights[key];
-    });
-    
+    const riskWhenHigh = (value, okAt) => {
+      if (value <= okAt) return 0;
+      return clamp01((value - okAt) / (100 - okAt)) * 100;
+    };
+
+    const pitchRisk = riskWhenLow(metrics.pitchVariation, 40);
+    const speechRisk = riskWhenLow(metrics.speechRate, 40);
+    const valenceRisk = riskWhenLow(metrics.emotionalValence, 35);
+    const pauseRisk = riskWhenHigh(metrics.pauseDuration, 60);
+    const monoRisk = riskWhenHigh(metrics.monotonicity, 70);
+
+    const weights = {
+      pitchRisk: 0.25,
+      speechRisk: 0.2,
+      pauseRisk: 0.2,
+      monoRisk: 0.2,
+      valenceRisk: 0.15
+    };
+
+    const score =
+      pitchRisk * weights.pitchRisk +
+      speechRisk * weights.speechRisk +
+      pauseRisk * weights.pauseRisk +
+      monoRisk * weights.monoRisk +
+      valenceRisk * weights.valenceRisk;
+
     return Math.min(score, 100);
   }, []);
 
   // Start recording
-  const startRecording = async () => {
+  const startRecording = useCallback(async () => {
+    if (isRecordingRef.current) return;
     try {
       initAudioContext();
       
@@ -159,7 +177,7 @@ const VoiceAnalysis = () => {
       let frameCount = 0;
       
       const analyzeAudio = () => {
-        if (!isRecording) return;
+        if (!isRecordingRef.current) return;
         
         const bufferLength = analyserRef.current.frequencyBinCount;
         const dataArray = new Uint8Array(bufferLength);
@@ -188,16 +206,20 @@ const VoiceAnalysis = () => {
         
         // Update metrics only every 10 frames to reduce noise
         if (frameCount % 10 === 0 && pitchHistory.length >= 10) {
+          const monotonicity = calculateMonotonicity(pitchHistory);
           const newMetrics = {
-            pitchVariation: calculateMonotonicity(pitchHistory),
+            pitchVariation: Math.max(0, 100 - monotonicity),
             speechRate: calculateSpeechRate(pitchHistory),
             pauseDuration: calculatePauseDuration(pitchHistory),
-            monotonicity: calculateMonotonicity(pitchHistory),
+            monotonicity,
             emotionalValence: calculateEmotionalValence(pitchHistory, intensityHistory)
           };
           
           setVoiceMetrics(newMetrics);
-          setVoiceRiskScore(calculateVoiceRiskScore(newMetrics));
+          const newRisk = calculateVoiceRiskScore(newMetrics);
+          setVoiceRiskScore(newRisk);
+          if (typeof onMetrics === 'function') onMetrics(newMetrics);
+          if (typeof onRiskScore === 'function') onRiskScore(newRisk);
         }
         
         // Update visualization data
@@ -207,6 +229,7 @@ const VoiceAnalysis = () => {
       };
       
       mediaRecorderRef.current.start();
+      isRecordingRef.current = true;
       setIsRecording(true);
       analyzeAudio();
       
@@ -214,13 +237,25 @@ const VoiceAnalysis = () => {
       console.error('Error accessing microphone:', error);
       alert('Please allow microphone access to use voice analysis');
     }
-  };
+  }, [
+    isRecording,
+    initAudioContext,
+    calculatePitch,
+    calculateMonotonicity,
+    calculateSpeechRate,
+    calculatePauseDuration,
+    calculateEmotionalValence,
+    calculateVoiceRiskScore,
+    onMetrics,
+    onRiskScore
+  ]);
 
   // Stop recording
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
+    if (mediaRecorderRef.current && isRecordingRef.current) {
       mediaRecorderRef.current.stop();
       mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      isRecordingRef.current = false;
       setIsRecording(false);
       
       if (animationRef.current) {
@@ -239,28 +274,44 @@ const VoiceAnalysis = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (startSignal == null) return;
+    if (lastStartSignalRef.current === startSignal) return;
+    lastStartSignalRef.current = startSignal;
+    startRecording();
+  }, [startSignal, startRecording]);
+
+  useEffect(() => {
+    if (stopSignal == null) return;
+    if (lastStopSignalRef.current === stopSignal) return;
+    lastStopSignalRef.current = stopSignal;
+    stopRecording();
+  }, [stopSignal]);
+
   const getVoiceRiskLevel = (score) => {
-    if (score < 20) return { level: 'Low', color: 'text-green-400' };
-    if (score < 40) return { level: 'Moderate', color: 'text-yellow-400' };
-    if (score < 60) return { level: 'Elevated', color: 'text-orange-400' };
-    return { level: 'High', color: 'text-red-400' };
+    if (score < 20) return { level: 'Low', color: 'text-green-600' };
+    if (score < 40) return { level: 'Moderate', color: 'text-yellow-600' };
+    if (score < 60) return { level: 'Elevated', color: 'text-orange-600' };
+    return { level: 'High', color: 'text-red-600' };
   };
 
   const voiceRiskInfo = getVoiceRiskLevel(voiceRiskScore);
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-8">
-      <div className="max-w-6xl mx-auto">
-        <h1 className="text-4xl font-bold mb-8 text-center">
-          Preventive AI - Voice Analysis System
-        </h1>
+    <div className={embedded ? 'text-gray-900' : 'min-h-screen bg-slate-50 text-gray-900 p-8'}>
+      <div className={embedded ? '' : 'max-w-6xl mx-auto'}>
+        {!embedded && (
+          <h1 className="text-4xl font-bold mb-8 text-center">
+            {t('Preventive AI - Voice Analysis System', 'Preventive AI - குரல் பகுப்பாய்வு அமைப்பு')}
+          </h1>
+        )}
         
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {/* Audio Visualization */}
           <div className="space-y-4">
-            <div className="bg-gray-800 rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">Audio Waveform</h2>
-              <div className="h-64 bg-gray-900 rounded-lg flex items-center justify-center">
+            <div className={`${embedded ? 'bg-gray-100' : 'bg-white shadow-sm border border-gray-200'} rounded-lg p-6 min-h-[220px] ${embedded ? '' : 'mt-6'}`}>
+              <h2 className="text-xl font-semibold mb-4 text-gray-900">{t('Audio Waveform', 'ஒலி அலைவடிவம்')}</h2>
+              <div className="h-64 bg-gray-100 rounded-lg flex items-center justify-center">
                 {isRecording ? (
                   <svg width="100%" height="100%" viewBox="0 0 400 256">
                     {audioData.map((value, index) => {
@@ -280,9 +331,10 @@ const VoiceAnalysis = () => {
                     })}
                   </svg>
                 ) : (
-                  <div className="text-gray-500 text-center">
-                    <div className="text-6xl mb-4">🎤</div>
-                    <p>Click "Start Recording" to begin voice analysis</p>
+                  <div className="text-gray-400 text-center">
+                    <p>{embedded
+                      ? t('Microphone will activate automatically', 'மைக்ரோஃபோன் தானாக செயல்படும்')
+                      : t('Click "Start Recording" to begin voice analysis', 'குரல் பகுப்பாய்வை தொடங்க "Start Recording" ஐ அழுத்தவும்')}</p>
                   </div>
                 )}
               </div>
@@ -291,136 +343,140 @@ const VoiceAnalysis = () => {
                 {isRecording && (
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-                    <span className="text-red-500">Recording...</span>
+                    <span className="text-red-500">{t('Recording...', 'பதிவு நடக்கிறது...')}</span>
                   </div>
                 )}
               </div>
             </div>
             
-            <div className="flex gap-4">
-              <button
-                onClick={startRecording}
-                disabled={isRecording}
-                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-6 py-3 rounded-lg font-semibold transition-colors"
-              >
-                {isRecording ? 'Recording...' : 'Start Recording'}
-              </button>
-              <button
-                onClick={stopRecording}
-                disabled={!isRecording}
-                className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 px-6 py-3 rounded-lg font-semibold transition-colors"
-              >
-                Stop Recording
-              </button>
-            </div>
+            {!hideControls && (
+              <div className="flex gap-4">
+                <button
+                  onClick={startRecording}
+                  disabled={isRecording}
+                  className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-6 py-3 rounded-lg font-semibold transition-colors"
+                >
+                  {isRecording ? t('Recording...', 'பதிவு நடக்கிறது') : t('Start Recording', 'பதிவை தொடங்கு')}
+                </button>
+                <button
+                  onClick={stopRecording}
+                  disabled={!isRecording}
+                  className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 px-6 py-3 rounded-lg font-semibold transition-colors"
+                >
+                  {t('Stop Recording', 'நிறுத்து')}
+                </button>
+              </div>
+            )}
           </div>
           
           {/* Voice Metrics */}
           <div className="space-y-4">
-            <div className="bg-gray-800 rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">Voice Metrics</h2>
+            <div className={`${embedded ? 'bg-gray-100' : 'bg-white shadow-sm border border-gray-200'} rounded-lg p-6`}>
+              <h2 className="text-xl font-semibold mb-4 text-gray-900">{t('Voice Metrics', 'குரல் அளவுகள்')}</h2>
               
               <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-300">Pitch Variation</span>
+                <div className="flex justify-between items-center pr-2">
+                  <span className="text-gray-900 w-28 shrink-0">{t('Pitch Variation', 'சுர நிலை மாற்றம்')}</span>
                   <div className="flex items-center gap-2">
-                    <div className="w-32 bg-gray-700 rounded-full h-2">
+                    <div className="flex-1 bg-gray-200 rounded-full h-2 min-w-[4rem]">
                       <div 
                         className="bg-blue-500 h-2 rounded-full transition-all duration-300"
                         style={{ width: `${voiceMetrics.pitchVariation}%` }}
                       />
                     </div>
-                    <span className="text-sm w-12 text-right">{voiceMetrics.pitchVariation.toFixed(0)}%</span>
+                    <span className="text-sm w-12 text-right shrink-0 tabular-nums">{voiceMetrics.pitchVariation.toFixed(0)}%</span>
                   </div>
                 </div>
                 
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-300">Speech Rate</span>
+                <div className="flex justify-between items-center pr-2">
+                  <span className="text-gray-900 w-28 shrink-0">{t('Speech Rate', 'பேச்சு வேகம்')}</span>
                   <div className="flex items-center gap-2">
-                    <div className="w-32 bg-gray-700 rounded-full h-2">
+                    <div className="flex-1 bg-gray-200 rounded-full h-2 min-w-[4rem]">
                       <div 
                         className="bg-purple-500 h-2 rounded-full transition-all duration-300"
                         style={{ width: `${voiceMetrics.speechRate}%` }}
                       />
                     </div>
-                    <span className="text-sm w-12 text-right">{voiceMetrics.speechRate.toFixed(0)}%</span>
+                    <span className="text-sm w-12 text-right shrink-0 tabular-nums">{voiceMetrics.speechRate.toFixed(0)}%</span>
                   </div>
                 </div>
                 
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-300">Pause Duration</span>
+                <div className="flex justify-between items-center pr-2">
+                  <span className="text-gray-900 w-28 shrink-0">{t('Pause Duration', 'இடைவேளை நீளம்')}</span>
                   <div className="flex items-center gap-2">
-                    <div className="w-32 bg-gray-700 rounded-full h-2">
+                    <div className="flex-1 bg-gray-200 rounded-full h-2 min-w-[4rem]">
                       <div 
                         className="bg-orange-500 h-2 rounded-full transition-all duration-300"
                         style={{ width: `${voiceMetrics.pauseDuration}%` }}
                       />
                     </div>
-                    <span className="text-sm w-12 text-right">{voiceMetrics.pauseDuration.toFixed(0)}%</span>
+                    <span className="text-sm w-12 text-right shrink-0 tabular-nums">{voiceMetrics.pauseDuration.toFixed(0)}%</span>
                   </div>
                 </div>
                 
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-300">Monotonicity</span>
+                <div className="flex justify-between items-center pr-2">
+                  <span className="text-gray-900 w-28 shrink-0">{t('Monotonicity', 'ஒற்றைத்தன்மை')}</span>
                   <div className="flex items-center gap-2">
-                    <div className="w-32 bg-gray-700 rounded-full h-2">
+                    <div className="flex-1 bg-gray-200 rounded-full h-2 min-w-[4rem]">
                       <div 
                         className="bg-green-500 h-2 rounded-full transition-all duration-300"
                         style={{ width: `${voiceMetrics.monotonicity}%` }}
                       />
                     </div>
-                    <span className="text-sm w-12 text-right">{voiceMetrics.monotonicity.toFixed(0)}%</span>
+                    <span className="text-sm w-12 text-right shrink-0 tabular-nums">{voiceMetrics.monotonicity.toFixed(0)}%</span>
                   </div>
                 </div>
                 
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-300">Emotional Valence</span>
+                <div className="flex justify-between items-center pr-2">
+                  <span className="text-gray-900 w-28 shrink-0">{t('Emotional Valence', 'உணர்ச்சி வலிமை')}</span>
                   <div className="flex items-center gap-2">
-                    <div className="w-32 bg-gray-700 rounded-full h-2">
+                    <div className="flex-1 bg-gray-200 rounded-full h-2 min-w-[4rem]">
                       <div 
                         className="bg-red-500 h-2 rounded-full transition-all duration-300"
                         style={{ width: `${voiceMetrics.emotionalValence}%` }}
                       />
                     </div>
-                    <span className="text-sm w-12 text-right">{voiceMetrics.emotionalValence.toFixed(0)}%</span>
+                    <span className="text-sm w-12 text-right shrink-0 tabular-nums">{voiceMetrics.emotionalValence.toFixed(0)}%</span>
                   </div>
                 </div>
               </div>
             </div>
             
             {/* Voice Risk Score */}
-            <div className="bg-gray-800 rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">Voice Risk Assessment</h2>
+            <div className={`${embedded ? 'bg-gray-100' : 'bg-white shadow-sm border border-gray-200'} rounded-lg p-6`}>
+              <h2 className="text-xl font-semibold mb-4">{t('Voice Risk Assessment', 'குரல் அபாய மதிப்பீடு')}</h2>
               <div className="text-center">
                 <div className="text-6xl font-bold mb-2">{voiceRiskScore.toFixed(1)}</div>
                 <div className={`text-2xl font-semibold ${voiceRiskInfo.color}`}>
                   {voiceRiskInfo.level} Risk
                 </div>
-                <div className="text-gray-400 mt-2">
-                  {isRecording ? 'Analyzing voice patterns...' : 'Start recording to analyze'}
+                <div className="text-gray-500 mt-2">
+                  {isRecording
+                    ? t('Analyzing voice patterns...', 'குரல் முறைப்பாடுகளை பகுப்பாய்வு செய்கிறது...')
+                    : t('Start recording to analyze', 'பகுப்பாய்விற்கு பதிவை தொடங்கவும்')}
                 </div>
               </div>
             </div>
             
             {/* Voice Disease Indicators */}
-            <div className="bg-gray-800 rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">Voice Disease Patterns</h2>
+            <div className={`${embedded ? 'bg-gray-100' : 'bg-white shadow-sm border border-gray-200'} rounded-lg p-6`}>
+              <h2 className="text-xl font-semibold mb-4">{t('Voice Disease Patterns', 'குரல் நோய் விதங்கள்')}</h2>
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-300">Parkinson's Voice:</span>
-                  <span className="text-blue-400">
+                  <span className="text-gray-900">{t("Parkinson's Voice", 'பார்கின்சன் குரல்')}:</span>
+                  <span className="text-blue-600">
                     {(voiceMetrics.monotonicity * 0.7 + voiceMetrics.pitchVariation * 0.3).toFixed(1)}%
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-300">Alzheimer's Speech:</span>
-                  <span className="text-purple-400">
+                  <span className="text-gray-900">{t("Alzheimer's Speech", 'அல்சைமர்ஸ் பேச்சு')}:</span>
+                  <span className="text-purple-600">
                     {(voiceMetrics.pauseDuration * 0.6 + voiceMetrics.speechRate * 0.4).toFixed(1)}%
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-300">Depression Voice:</span>
-                  <span className="text-green-400">
+                  <span className="text-gray-900">{t('Depression Voice', 'மனஅழுத்த குரல்')}:</span>
+                  <span className="text-green-600">
                     {(voiceMetrics.monotonicity * 0.5 + voiceMetrics.emotionalValence * 0.5).toFixed(1)}%
                   </span>
                 </div>

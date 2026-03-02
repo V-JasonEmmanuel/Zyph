@@ -8,28 +8,29 @@
   }
   
   body {
-    @apply bg-gray-900 text-white font-sans;
+    @apply bg-slate-50 text-gray-900 font-sans;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
   }
 }
 
 @layer components {
   .glass-effect {
-    @apply bg-white/10 backdrop-blur-md border border-white/20;
+    @apply bg-white/80 backdrop-blur-md border border-gray-200;
   }
   
   .risk-low {
-    @apply bg-green-500/20 text-green-400 border-green-500/30;
+    @apply bg-green-50 text-green-700 border-green-200;
   }
   
   .risk-moderate {
-    @apply bg-yellow-500/20 text-yellow-400 border-yellow-500/30;
+    @apply bg-yellow-50 text-yellow-700 border-yellow-200;
   }
   
   .risk-elevated {
-    @apply bg-orange-500/20 text-orange-400 border-orange-500/30;
+    @apply bg-orange-50 text-orange-700 border-orange-200;
   }
   
   .risk-high {
-    @apply bg-red-500/20 text-red-400 border-red-500/30;
+    @apply bg-red-50 text-red-700 border-red-200;
   }
 }
