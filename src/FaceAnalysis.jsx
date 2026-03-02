@@ -269,12 +269,14 @@ const FaceAnalysis = ({ onRiskScore, onMetrics, startSignal, stopSignal, initial
     const prev = prevKeypointsRef.current;
     let sum = 0;
     for (let i = 0; i < cur.length; i++) {
-      sum += Math.hypot(cur[i].x - prev[i].x, cur[i].y - prev[i].y);
+      const d = Math.hypot(cur[i].x - prev[i].x, cur[i].y - prev[i].y);
+      // Ignore camera noise below threshold
+      if (d > 0.002) sum += d;
     }
     prevKeypointsRef.current = cur.map((p) => ({ x: p.x, y: p.y }));
  
     const avg = sum / cur.length;
-    return Math.min((avg * 10000), 100);
+    return Math.min((avg * 3000), 100);
   }, []);
 
   // Calculate overall risk score
@@ -568,18 +570,19 @@ const FaceAnalysis = ({ onRiskScore, onMetrics, startSignal, stopSignal, initial
   const riskInfo = getRiskLevel(riskScore);
 
   return (
-    <div className={embedded ? 'text-white' : 'min-h-screen bg-gray-900 text-white p-8'}>
-      <div className="max-w-6xl mx-auto">
+    <div className={embedded ? 'text-gray-900' : 'min-h-screen bg-slate-50 text-gray-900 p-8'}>
+      <div className={embedded ? '' : 'max-w-6xl mx-auto'}>
         {!embedded && (
           <h1 className="text-4xl font-bold mb-8 text-center">
             {t('Preventive AI - Face Analysis System', 'Preventive AI - முக பகுப்பாய்வு அமைப்பு')}
           </h1>
         )}
         
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {/* Video and Canvas */}
           <div className="space-y-4">
-            <div className="bg-gray-800 rounded-lg p-4">
+            <div className={`${embedded ? 'bg-gray-100' : 'bg-white shadow-sm border border-gray-200'} rounded-lg p-4`}>
+              {!embedded && (
               <div className="flex flex-col gap-3 mb-4">
                 <h2 className="text-xl font-semibold">
                   {analysisSource === 'live'
@@ -592,7 +595,7 @@ const FaceAnalysis = ({ onRiskScore, onMetrics, startSignal, stopSignal, initial
                     className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
                       analysisSource === 'live'
                         ? 'bg-blue-600 text-white'
-                        : 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
                     }`}
                   >
                     {t('Live Tracking', 'நேரடி கண்காணிப்பு')}
@@ -602,7 +605,7 @@ const FaceAnalysis = ({ onRiskScore, onMetrics, startSignal, stopSignal, initial
                     className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
                       analysisSource === 'sample'
                         ? 'bg-blue-600 text-white'
-                        : 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
                     }`}
                   >
                     {t('Sample Video', 'மாதிரி வீடியோ')}
@@ -610,14 +613,14 @@ const FaceAnalysis = ({ onRiskScore, onMetrics, startSignal, stopSignal, initial
                 </div>
                 {analysisSource === 'sample' && (
                   <div>
-                    <label className="block text-sm text-gray-300 mb-2">
+                    <label className="block text-sm text-gray-600 mb-2">
                       {t('Upload video', 'வீடியோ பதிவேற்று')}
                     </label>
                     <input
                       type="file"
                       accept="video/*"
                       onChange={handleSampleFileChange}
-                      className="block w-full text-sm text-gray-300 file:mr-4 file:rounded-full file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-white hover:file:bg-blue-700"
+                      className="block w-full text-sm text-gray-600 file:mr-4 file:rounded-full file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-white hover:file:bg-blue-700"
                     />
                     {sampleError && (
                       <p className="text-sm text-red-400 mt-2">{sampleError}</p>
@@ -625,22 +628,51 @@ const FaceAnalysis = ({ onRiskScore, onMetrics, startSignal, stopSignal, initial
                   </div>
                 )}
               </div>
-              <video
-                ref={videoRef}
-                src={analysisSource === 'sample' ? sampleVideoUrl : undefined}
-                className="w-full rounded-lg"
-                autoPlay
-                playsInline
-                loop={analysisSource === 'sample'}
-                controls={analysisSource === 'sample'}
-                muted
-              />
-              <canvas
-                ref={canvasRef}
-                width={640}
-                height={480}
-                className="w-full rounded-lg mt-4"
-              />
+              )}
+              {/* Stacked video + canvas container */}
+              <div className="relative aspect-video bg-gray-100 rounded-lg overflow-hidden">
+                <video
+                  ref={videoRef}
+                  src={analysisSource === 'sample' ? sampleVideoUrl : undefined}
+                  className="absolute inset-0 w-full h-full object-cover rounded-lg"
+                  autoPlay
+                  playsInline
+                  loop={analysisSource === 'sample'}
+                  controls={false}
+                  muted
+                />
+                <canvas
+                  ref={canvasRef}
+                  width={640}
+                  height={480}
+                  className="absolute inset-0 w-full h-full rounded-lg"
+                  style={{ pointerEvents: 'none' }}
+                />
+                {/* Placeholder before analysis starts */}
+                {!isAnalyzing && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-gray-100 rounded-lg">
+                    <div className="text-center">
+                      <p className="text-gray-500 text-sm">
+                        {embedded
+                          ? t('Camera will activate automatically', 'கேமரா தானாக செயல்படும்')
+                          : t('Click "Start Analysis" to begin', '"Start Analysis" ஐ அழுத்தி தொடங்கவும்')}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {/* Live badge */}
+                {isAnalyzing && (
+                  <div className="absolute top-2 right-2">
+                    <span className="text-xs bg-red-600 text-white px-2 py-1 rounded-full animate-pulse">REC</span>
+                  </div>
+                )}
+                {/* Landmark count badge */}
+                {isAnalyzing && landmarks.length > 0 && (
+                  <div className="absolute bottom-2 left-2">
+                    <span className="text-xs bg-green-700 text-white px-2 py-1 rounded">{landmarks.length} landmarks</span>
+                  </div>
+                )}
+              </div>
             </div>
             
             {!hideControls && (
@@ -665,14 +697,14 @@ const FaceAnalysis = ({ onRiskScore, onMetrics, startSignal, stopSignal, initial
           
           {/* Metrics Display */}
           <div className="space-y-4">
-            <div className="bg-gray-800 rounded-lg p-6 min-h-[220px]">
-              <h2 className="text-xl font-semibold mb-4">{t('Real-time Metrics', 'நேரடி அளவுகள்')}</h2>
+            <div className={`${embedded ? 'bg-gray-100' : 'bg-white shadow-sm border border-gray-200'} rounded-lg p-6 min-h-[220px]`}>
+              <h2 className="text-xl font-semibold mb-4 text-gray-900">{t('Real-time Metrics', 'நேரடி அளவுகள்')}</h2>
               
               <div className="space-y-4">
                 <div className="flex justify-between items-center pr-2">
-                  <span className="text-gray-300 w-28 shrink-0">{t('Blink Rate', 'கண் இமைப்பு விகிதம்')}</span>
+                  <span className="text-gray-900 w-28 shrink-0">{t('Blink Rate', 'கண் இமைப்பு விகிதம்')}</span>
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-gray-700 rounded-full h-2 min-w-[4rem]">
+                    <div className="flex-1 bg-gray-200 rounded-full h-2 min-w-[4rem]">
                       <div 
                         className="bg-blue-500 h-2 rounded-full transition-all duration-300"
                         style={{ width: `${metrics.blinkRate}%` }}
@@ -683,9 +715,9 @@ const FaceAnalysis = ({ onRiskScore, onMetrics, startSignal, stopSignal, initial
                 </div>
                 
                 <div className="flex justify-between items-center pr-2">
-                  <span className="text-gray-300 w-28 shrink-0">{t('Gaze Deviation', 'நோக்கு விலக்கம்')}</span>
+                  <span className="text-gray-900 w-28 shrink-0">{t('Gaze Deviation', 'நோக்கு விலக்கம்')}</span>
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-gray-700 rounded-full h-2 min-w-[4rem]">
+                    <div className="flex-1 bg-gray-200 rounded-full h-2 min-w-[4rem]">
                       <div 
                         className="bg-purple-500 h-2 rounded-full transition-all duration-300"
                         style={{ width: `${metrics.gazeDeviation}%` }}
@@ -696,9 +728,9 @@ const FaceAnalysis = ({ onRiskScore, onMetrics, startSignal, stopSignal, initial
                 </div>
                 
                 <div className="flex justify-between items-center pr-2">
-                  <span className="text-gray-300 w-28 shrink-0">{t('Facial Asymmetry', 'முக அசமச்சீர்மை')}</span>
+                  <span className="text-gray-900 w-28 shrink-0">{t('Facial Asymmetry', 'முக அசமச்சீர்மை')}</span>
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-gray-700 rounded-full h-2 min-w-[4rem]">
+                    <div className="flex-1 bg-gray-200 rounded-full h-2 min-w-[4rem]">
                       <div 
                         className="bg-orange-500 h-2 rounded-full transition-all duration-300"
                         style={{ width: `${metrics.facialAsymmetry}%` }}
@@ -709,9 +741,9 @@ const FaceAnalysis = ({ onRiskScore, onMetrics, startSignal, stopSignal, initial
                 </div>
                 
                 <div className="flex justify-between items-center pr-2">
-                  <span className="text-gray-300 w-28 shrink-0">{t('Expressivity', 'உணர்ச்சி வெளிப்பாடு')}</span>
+                  <span className="text-gray-900 w-28 shrink-0">{t('Expressivity', 'உணர்ச்சி வெளிப்பாடு')}</span>
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-gray-700 rounded-full h-2 min-w-[4rem]">
+                    <div className="flex-1 bg-gray-200 rounded-full h-2 min-w-[4rem]">
                       <div 
                         className="bg-green-500 h-2 rounded-full transition-all duration-300"
                         style={{ width: `${metrics.expressivity}%` }}
@@ -722,9 +754,9 @@ const FaceAnalysis = ({ onRiskScore, onMetrics, startSignal, stopSignal, initial
                 </div>
                 
                 <div className="flex justify-between items-center pr-2">
-                  <span className="text-gray-300 w-28 shrink-0">{t('Tremor Indicators', 'குலுக்கல் குறிகள்')}</span>
+                  <span className="text-gray-900 w-28 shrink-0">{t('Tremor Indicators', 'குலுக்கல் குறிகள்')}</span>
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-gray-700 rounded-full h-2 min-w-[4rem]">
+                    <div className="flex-1 bg-gray-200 rounded-full h-2 min-w-[4rem]">
                       <div 
                         className="bg-red-500 h-2 rounded-full transition-all duration-300"
                         style={{ width: `${metrics.tremorIndicators}%` }}
@@ -735,9 +767,9 @@ const FaceAnalysis = ({ onRiskScore, onMetrics, startSignal, stopSignal, initial
                 </div>
 
                 <div className="flex justify-between items-center pr-2">
-                  <span className="text-gray-300 w-28 shrink-0">{t('Head Pose (Yaw)', 'தலை நிலை (Yaw)')}</span>
+                  <span className="text-gray-900 w-28 shrink-0">{t('Head Pose (Yaw)', 'தலை நிலை (Yaw)')}</span>
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-gray-700 rounded-full h-2 min-w-[4rem]">
+                    <div className="flex-1 bg-gray-200 rounded-full h-2 min-w-[4rem]">
                       <div 
                         className="bg-cyan-500 h-2 rounded-full transition-all duration-300"
                         style={{ width: `${Math.min(Math.abs(metrics.headPoseAngle) / 30 * 100, 100)}%` }}
@@ -748,9 +780,9 @@ const FaceAnalysis = ({ onRiskScore, onMetrics, startSignal, stopSignal, initial
                 </div>
 
                 <div className="flex justify-between items-center pr-2">
-                  <span className="text-gray-300 w-28 shrink-0">{t('Gaze Oscillation', 'கண் அசைவு அதிர்வு')}</span>
+                  <span className="text-gray-900 w-28 shrink-0">{t('Gaze Oscillation', 'கண் அசைவு அதிர்வு')}</span>
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-gray-700 rounded-full h-2 min-w-[4rem]">
+                    <div className="flex-1 bg-gray-200 rounded-full h-2 min-w-[4rem]">
                       <div 
                         className="bg-pink-500 h-2 rounded-full transition-all duration-300"
                         style={{ width: `${metrics.gazeOscillation}%` }}
@@ -761,9 +793,9 @@ const FaceAnalysis = ({ onRiskScore, onMetrics, startSignal, stopSignal, initial
                 </div>
 
                 <div className="flex justify-between items-center pr-2">
-                  <span className="text-gray-300 w-28 shrink-0">{t('Eye Movement', 'கண் இயக்கம்')}</span>
+                  <span className="text-gray-900 w-28 shrink-0">{t('Eye Movement', 'கண் இயக்கம்')}</span>
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-gray-700 rounded-full h-2 min-w-[4rem]">
+                    <div className="flex-1 bg-gray-200 rounded-full h-2 min-w-[4rem]">
                       <div 
                         className="bg-emerald-500 h-2 rounded-full transition-all duration-300"
                         style={{ width: `${metrics.eyeMovement}%` }}
@@ -776,49 +808,49 @@ const FaceAnalysis = ({ onRiskScore, onMetrics, startSignal, stopSignal, initial
             </div>
             
             {/* Risk Score */}
-            <div className="bg-gray-800 rounded-lg p-6">
+            <div className={`${embedded ? 'bg-gray-100' : 'bg-white'} rounded-lg p-6`}>
               <h2 className="text-xl font-semibold mb-4">{t('Risk Assessment', 'அபாய மதிப்பீடு')}</h2>
               <div className="text-center">
                 <div className="text-6xl font-bold mb-2">{riskScore.toFixed(1)}</div>
                 <div className={`text-2xl font-semibold ${riskInfo.color}`}>
                   {riskInfo.level} Risk
                 </div>
-                <div className="text-gray-400 mt-2">
+                <div className="text-gray-500 mt-2">
                   {landmarks.length > 0
                     ? t(`${landmarks.length} landmarks detected`, `${landmarks.length} அடையாளங்கள் கண்டறியப்பட்டது`)
                     : t('No face detected', 'முகம் கண்டறியப்படவில்லை')}
                 </div>
-                <div className="text-gray-400 mt-1">
+                <div className="text-gray-500 mt-1">
                   {t('Blinks/min', 'இமைப்பு/நிமிடம்')}: {blinkRateBpm.toFixed(1)}
                 </div>
-                <div className="text-gray-400 mt-1">
+                <div className="text-gray-500 mt-1">
                   {t('Head pose', 'தலை நிலை')}: {metrics.headAbnormal ? t('Abnormal', 'அசாதாரணம்') : t('Normal', 'சாதாரணம்')}
                 </div>
-                <div className="text-gray-400 mt-1">
+                <div className="text-gray-500 mt-1">
                   {t('Gaze oscillation', 'கண் அசைவு அதிர்வு')}: {metrics.gazeOscillation ? t('Detected', 'கண்டறியப்பட்டது') : t('Stable', 'நிலையானது')}
                 </div>
               </div>
             </div>
             
             {/* Disease Indicators */}
-            <div className="bg-gray-800 rounded-lg p-6">
+            <div className={`${embedded ? 'bg-gray-100' : 'bg-white'} rounded-lg p-6`}>
               <h2 className="text-xl font-semibold mb-4">{t('Disease Pattern Analysis', 'நோய் வித பகுப்பாய்வு')}</h2>
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-300">{t("Parkinson's Indicators", 'பார்கின்சன் குறிகள்')}:</span>
-                  <span className="text-blue-400">
+                  <span className="text-gray-900">{t("Parkinson's Indicators", 'பார்கின்சன் குறிகள்')}:</span>
+                  <span className="text-blue-600">
                     {(metrics.facialAsymmetry * 0.6 + metrics.tremorIndicators * 0.4).toFixed(1)}%
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-300">{t("Alzheimer's Indicators", 'அல்சைமர்ஸ் குறிகள்')}:</span>
-                  <span className="text-purple-400">
+                  <span className="text-gray-900">{t("Alzheimer's Indicators", 'அல்சைமர்ஸ் குறிகள்')}:</span>
+                  <span className="text-purple-600">
                     {(metrics.gazeDeviation * 0.5 + metrics.expressivity * 0.5).toFixed(1)}%
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-300">{t('Depression Indicators', 'மனஅழுத்த குறிகள்')}:</span>
-                  <span className="text-green-400">
+                  <span className="text-gray-900">{t('Depression Indicators', 'மனஅழுத்த குறிகள்')}:</span>
+                  <span className="text-green-600">
                     {(metrics.expressivity * 0.7 + metrics.blinkRate * 0.3).toFixed(1)}%
                   </span>
                 </div>

@@ -11,15 +11,18 @@
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0"
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-router-dom": "^6.8.1",
+    "@mediapipe/camera_utils": "^0.3.1632432234",
+    "@mediapipe/face_mesh": "^0.4.1633559619",
+    "@mediapipe/hands": "^0.4.1675469240",
+    "@mediapipe/holistic": "^0.5.1675471629",
+    "@mediapipe/pose": "^0.5.1675469404",
     "framer-motion": "^10.12.16",
     "lucide-react": "^0.263.1",
-    "@mediapipe/face_mesh": "^0.4.1633559619",
-    "@mediapipe/camera_utils": "^0.3.1632432234",
-    "recharts": "^2.7.2",
-    "react-intersection-observer": "^9.4.3"
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-intersection-observer": "^9.4.3",
+    "react-router-dom": "^6.8.1",
+    "recharts": "^2.7.2"
   },
   "devDependencies": {
     "@types/react": "^18.2.14",

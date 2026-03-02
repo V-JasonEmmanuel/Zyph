@@ -2,6 +2,8 @@ import React, { useMemo, useState, useRef, useEffect } from 'react';
 import FaceAnalysis from './FaceAnalysis';
 import VoiceAnalysis from './VoiceAnalysis';
 import DemoSection from './DemoSection';
+import BodyAnalysis from './BodyAnalysis';
+import WorkflowOrchestrator from './workflow/WorkflowOrchestrator';
 
 const CombinedAnalysis = () => {
   const [activeTab, setActiveTab] = useState('analysis');
@@ -39,10 +41,12 @@ const CombinedAnalysis = () => {
   const t = (en, ta) => (language === 'ta' ? ta : en);
 
   const tabs = [
-    { id: 'analysis', label: t('Face + Voice', 'முக + குரல்'), icon: '🧩' },
-    { id: 'demo', label: t('Demo Mode', 'டெமோ'), icon: '🎭' },
-    { id: 'combined', label: t('Combined Assessment', 'ஒருங்கிணைந்த மதிப்பீடு'), icon: '📊' },
-    { id: 'about', label: t('About', 'பற்றி'), icon: 'ℹ️' }
+    { id: 'analysis', label: t('Face + Voice', 'முக + குரல்') },
+    { id: 'body', label: t('Body Analysis', 'உடல் பகுப்பாய்வு') },
+    { id: 'demo', label: t('Demo Mode', 'டெமோ') },
+    { id: 'combined', label: t('Combined Assessment', 'ஒருங்கிணைந்த மதிப்பீடு') },
+    { id: 'fullAssessment', label: t('Full Assessment', 'முழு மதிப்பீடு') },
+    { id: 'about', label: t('About', 'பற்றி') }
   ];
 
   const aboutDiseases = [
@@ -157,10 +161,10 @@ const CombinedAnalysis = () => {
   }, []);
 
   const getOverallRiskLevel = (score) => {
-    if (score < 20) return { level: 'Low', color: 'text-green-400', bg: 'bg-green-900' };
-    if (score < 40) return { level: 'Moderate', color: 'text-yellow-400', bg: 'bg-yellow-900' };
-    if (score < 60) return { level: 'Elevated', color: 'text-orange-400', bg: 'bg-orange-900' };
-    return { level: 'High', color: 'text-red-400', bg: 'bg-red-900' };
+    if (score < 20) return { level: 'Low', color: 'text-green-700', bg: 'bg-green-50' };
+    if (score < 40) return { level: 'Moderate', color: 'text-yellow-700', bg: 'bg-yellow-50' };
+    if (score < 60) return { level: 'Elevated', color: 'text-orange-700', bg: 'bg-orange-50' };
+    return { level: 'High', color: 'text-red-700', bg: 'bg-red-50' };
   };
 
   const overallRiskInfo = getOverallRiskLevel(combinedRisk.overall ?? 0);
@@ -172,16 +176,16 @@ const CombinedAnalysis = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="min-h-screen bg-slate-50 text-gray-900">
       {/* Header */}
-      <div className="bg-gray-800 border-b border-gray-700">
+      <div className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="text-center md:text-left">
-              <h1 className="text-3xl font-bold">
+              <h1 className="text-3xl font-bold text-gray-900">
                 {t('Preventive AI - Behavioral Analysis System', 'Preventive AI - நடத்தை பகுப்பாய்வு அமைப்பு')}
               </h1>
-              <p className="text-gray-400 mt-2">
+              <p className="text-gray-500 mt-2">
                 {t(
                   'Real-time face and voice analysis for early disease detection',
                   'ஆரம்ப கட்ட கண்டறிதலுக்கான முக மற்றும் குரல் பகுப்பாய்வு'
@@ -190,7 +194,7 @@ const CombinedAnalysis = () => {
             </div>
             <button
               onClick={() => setLanguage((prev) => (prev === 'en' ? 'ta' : 'en'))}
-              className="mx-auto md:mx-0 px-4 py-2 rounded-full bg-gray-700 hover:bg-gray-600 text-sm font-semibold"
+              className="mx-auto md:mx-0 px-4 py-2 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold border border-gray-300"
             >
               {language === 'en' ? 'தமிழ்' : 'English'}
             </button>
@@ -199,7 +203,7 @@ const CombinedAnalysis = () => {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="bg-gray-800 border-b border-gray-700 sticky top-0 z-10">
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex space-x-1">
             {tabs.map((tab) => (
@@ -209,10 +213,9 @@ const CombinedAnalysis = () => {
                 className={`px-6 py-3 font-medium transition-colors ${
                   activeTab === tab.id
                     ? 'bg-blue-600 text-white'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                    : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
                 }`}
               >
-                <span className="mr-2">{tab.icon}</span>
                 {tab.label}
               </button>
             ))}
@@ -224,16 +227,16 @@ const CombinedAnalysis = () => {
       <div className="max-w-7xl mx-auto px-4 py-8">
         {activeTab === 'analysis' && (
           <div className="space-y-6">
-            <div className="bg-gray-800 rounded-lg p-6">
+            <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <h2 className="text-2xl font-bold">
+                  <h2 className="text-2xl font-bold text-gray-900">
                     {t('Live Analysis', 'நேரடி பகுப்பாய்வு')}
                   </h2>
-                  <p className="text-gray-400">
+                  <p className="text-gray-500">
                     {t('Start both face and voice analysis together.', 'முகம் மற்றும் குரல் பகுப்பாய்வை ஒரே நேரத்தில் தொடங்குங்கள்.')}
                   </p>
-                    <p className="text-sm text-gray-400 mt-2">
+                    <p className="text-sm text-gray-500 mt-2">
                       {analysisActive
                         ? t(`Time left: ${analysisRemaining}s`, `மீதமுள்ள நேரம்: ${analysisRemaining} வி.`)
                         : t('Ready to start.', 'தொடங்க தயாராக உள்ளது.')}
@@ -257,8 +260,8 @@ const CombinedAnalysis = () => {
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              <div className="bg-gray-800 rounded-lg p-6">
-                <h3 className="text-xl font-semibold mb-4">{t('Face Analysis', 'முக பகுப்பாய்வு')}</h3>
+              <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+                <h3 className="text-xl font-semibold mb-4 text-gray-900">{t('Face Analysis', 'முக பகுப்பாய்வு')}</h3>
                 <FaceAnalysis
                   onRiskScore={setFaceRisk}
                   onMetrics={setFaceMetrics}
@@ -269,8 +272,8 @@ const CombinedAnalysis = () => {
                   embedded
                 />
               </div>
-              <div className="bg-gray-800 rounded-lg p-6">
-                <h3 className="text-xl font-semibold mb-4">{t('Voice Analysis', 'குரல் பகுப்பாய்வு')}</h3>
+              <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+                <h3 className="text-xl font-semibold mb-4 text-gray-900">{t('Voice Analysis', 'குரல் பகுப்பாய்வு')}</h3>
                 <VoiceAnalysis
                   onRiskScore={setVoiceRisk}
                   onMetrics={setVoiceMetrics}
@@ -284,16 +287,18 @@ const CombinedAnalysis = () => {
             </div>
           </div>
         )}
+        {activeTab === 'body' && <BodyAnalysis />}
+        {activeTab === 'fullAssessment' && <WorkflowOrchestrator language={language} />}
         {activeTab === 'demo' && <DemoSection language={language} />}
         
         {activeTab === 'combined' && (
           <div className="space-y-8">
             {/* Start Analyze + Intake */}
-            <div className="bg-gray-800 rounded-lg p-8">
-              <h2 className="text-2xl font-bold mb-4 text-center">
+            <div className="bg-white rounded-lg p-8 shadow-sm border border-gray-200">
+              <h2 className="text-2xl font-bold mb-4 text-center text-gray-900">
                 {t('Start Analyze', 'பகுப்பாய்வு தொடங்கு')}
               </h2>
-              <p className="text-center text-gray-400 mb-6">
+              <p className="text-center text-gray-500 mb-6">
                 {t(
                   'Face analysis starts first, then voice analysis begins after a short baseline capture.',
                   'முதலில் முக பகுப்பாய்வு தொடங்கும்; சிறிய அடிப்படை நேரத்திற்குப் பிறகு குரல் பகுப்பாய்வு தொடங்கும்.'
@@ -313,23 +318,23 @@ const CombinedAnalysis = () => {
                   {t('Skip to Voice', 'குரலுக்கு செல்லவும்')}
                 </button>
               </div>
-              <div className="mt-3 text-center text-xs text-gray-500">
+              <div className="mt-3 text-center text-xs text-gray-400">
                 {t(
                   'We will open the camera view when analysis starts.',
                   'பகுப்பாய்வு தொடங்கும் போது கேமரா பார்வை திறக்கப்படும்.'
                 )}
               </div>
-              <div className="mt-4 text-center text-sm text-gray-400">
+              <div className="mt-4 text-center text-sm text-gray-500">
                 {sequenceStatus === 'face' && t('Capturing face baseline...', 'முக அடிப்படை தரவு பதிவு செய்கிறது...')}
                 {sequenceStatus === 'voice' && t('Voice analysis started.', 'குரல் பகுப்பாய்வு தொடங்கியது.')}
                 {sequenceStatus === 'idle' && t('Ready to start.', 'தொடங்க தயாராக உள்ளது.')}
               </div>
 
-              <div className="mt-8 border-t border-gray-700 pt-6">
-                <h3 className="text-xl font-semibold mb-2">
+              <div className="mt-8 border-t border-gray-200 pt-6">
+                <h3 className="text-xl font-semibold mb-2 text-gray-900">
                   {t('Health Questions', 'ஆரோக்கிய கேள்விகள்')}
                 </h3>
-                <p className="text-gray-400 mb-6">
+                <p className="text-gray-500 mb-6">
                   {t(
                     'These details help personalize face and voice analysis.',
                     'இந்த தகவல்கள் முக மற்றும் குரல் பகுப்பாய்வை மேம்படுத்த உதவும்.'
@@ -337,31 +342,31 @@ const CombinedAnalysis = () => {
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm text-gray-300 mb-2">{t('Age', 'வயது')}</label>
+                    <label className="block text-sm text-gray-600 mb-2">{t('Age', 'வயது')}</label>
                     <input
                       type="number"
                       value={intake.age}
                       onChange={updateIntake('age')}
-                      className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white"
+                      className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                       placeholder={t('e.g., 45', 'உதா., 45')}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-300 mb-2">{t('Known diagnosis', 'தெரிந்த நோய்')}</label>
+                    <label className="block text-sm text-gray-600 mb-2">{t('Known diagnosis', 'தெரிந்த நோய்')}</label>
                     <input
                       type="text"
                       value={intake.diagnosis}
                       onChange={updateIntake('diagnosis')}
-                      className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white"
+                      className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                       placeholder={t('e.g., None', 'உதா., இல்லை')}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-300 mb-2">{t('Sleep quality', 'உறக்க தரம்')}</label>
+                    <label className="block text-sm text-gray-600 mb-2">{t('Sleep quality', 'உறக்க தரம்')}</label>
                     <select
                       value={intake.sleepQuality}
                       onChange={updateIntake('sleepQuality')}
-                      className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white"
+                      className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                     >
                       <option value="">{t('Select', 'தேர்வு')}</option>
                       <option value="good">{t('Good', 'நல்லது')}</option>
@@ -374,7 +379,7 @@ const CombinedAnalysis = () => {
                     <select
                       value={intake.memoryChanges}
                       onChange={updateIntake('memoryChanges')}
-                      className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white"
+                      className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                     >
                       <option value="">{t('Select', 'தேர்வு')}</option>
                       <option value="no">{t('No', 'இல்லை')}</option>
@@ -383,11 +388,11 @@ const CombinedAnalysis = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-300 mb-2">{t('Speech changes?', 'பேச்சில் மாற்றம்?')}</label>
+                    <label className="block text-sm text-gray-600 mb-2">{t('Speech changes?', 'பேச்சில் மாற்றம்?')}</label>
                     <select
                       value={intake.speechChanges}
                       onChange={updateIntake('speechChanges')}
-                      className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white"
+                      className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                     >
                       <option value="">{t('Select', 'தேர்வு')}</option>
                       <option value="no">{t('No', 'இல்லை')}</option>
@@ -397,12 +402,12 @@ const CombinedAnalysis = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-300 mb-2">{t('Current medications', 'தற்போதைய மருந்துகள்')}</label>
+                    <label className="block text-sm text-gray-600 mb-2">{t('Current medications', 'தற்போதைய மருந்துகள்')}</label>
                     <input
                       type="text"
                       value={intake.medications}
                       onChange={updateIntake('medications')}
-                      className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white"
+                      className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2 text-gray-900"
                       placeholder={t('e.g., None', 'உதா., இல்லை')}
                     />
                   </div>
@@ -411,36 +416,33 @@ const CombinedAnalysis = () => {
             </div>
 
             {/* Combined Risk Dashboard */}
-            <div className="bg-gray-800 rounded-lg p-8">
-              <h2 className="text-2xl font-bold mb-6 text-center">
+            <div className="bg-white rounded-lg p-8 shadow-sm border border-gray-200">
+              <h2 className="text-2xl font-bold mb-6 text-center text-gray-900">
                 {t('Combined Risk Assessment', 'ஒருங்கிணைந்த அபாய மதிப்பீடு')}
               </h2>
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 {/* Face Risk */}
-                <div className="bg-gray-700 rounded-lg p-6 text-center">
-                  <div className="text-4xl mb-2">👤</div>
-                  <h3 className="text-lg font-semibold mb-2">Face Analysis</h3>
-                  <div className="text-3xl font-bold text-blue-400 mb-1">
+                <div className="bg-gray-50 rounded-lg p-6 text-center border border-gray-200">
+                  <h3 className="text-lg font-semibold mb-2 text-gray-900">Face Analysis</h3>
+                  <div className="text-3xl font-bold text-blue-600 mb-1">
                     {fmt(combinedRisk.face)}
                   </div>
-                  <div className="text-sm text-gray-400">Risk Score</div>
+                  <div className="text-sm text-gray-500">Risk Score</div>
                 </div>
                 
                 {/* Voice Risk */}
-                <div className="bg-gray-700 rounded-lg p-6 text-center">
-                  <div className="text-4xl mb-2">🎤</div>
-                  <h3 className="text-lg font-semibold mb-2">Voice Analysis</h3>
-                  <div className="text-3xl font-bold text-purple-400 mb-1">
+                <div className="bg-gray-50 rounded-lg p-6 text-center border border-gray-200">
+                  <h3 className="text-lg font-semibold mb-2 text-gray-900">Voice Analysis</h3>
+                  <div className="text-3xl font-bold text-purple-600 mb-1">
                     {fmt(combinedRisk.voice)}
                   </div>
-                  <div className="text-sm text-gray-400">Risk Score</div>
+                  <div className="text-sm text-gray-500">Risk Score</div>
                 </div>
                 
                 {/* Overall Risk */}
-                <div className={`${overallRiskInfo.bg} rounded-lg p-6 text-center border-2 border-opacity-50 ${overallRiskInfo.color.replace('text-', 'border-')}`}>
-                  <div className="text-4xl mb-2">📊</div>
-                  <h3 className="text-lg font-semibold mb-2">Overall Risk</h3>
+                <div className={`${overallRiskInfo.bg} rounded-lg p-6 text-center border-2 ${overallRiskInfo.color.replace('text-', 'border-')}`}>
+                  <h3 className="text-lg font-semibold mb-2 text-gray-900">Overall Risk</h3>
                   <div className={`text-3xl font-bold ${overallRiskInfo.color} mb-1`}>
                     {fmt(combinedRisk.overall)}
                   </div>
@@ -456,10 +458,10 @@ const CombinedAnalysis = () => {
                   <span>Overall Risk Level</span>
                   <span className={overallRiskInfo.color}>{overallRiskInfo.level}</span>
                 </div>
-                <div className="w-full bg-gray-700 rounded-full h-4">
+                <div className="w-full bg-gray-200 rounded-full h-4">
                   <div 
                     className={`h-4 rounded-full transition-all duration-500 ${
-                      combinedRisk.overall == null ? 'bg-gray-500' :
+                      combinedRisk.overall == null ? 'bg-gray-300' :
                       combinedRisk.overall < 20 ? 'bg-green-500' :
                       combinedRisk.overall < 40 ? 'bg-yellow-500' :
                       combinedRisk.overall < 60 ? 'bg-orange-500' : 'bg-red-500'
@@ -469,26 +471,26 @@ const CombinedAnalysis = () => {
                 </div>
               </div>
 
-              <div className="border-t border-gray-700 pt-6">
-                <h3 className="text-lg font-semibold mb-4">
+              <div className="border-t border-gray-200 pt-6">
+                <h3 className="text-lg font-semibold mb-4 text-gray-900">
                   {t('Latest Face Signals', 'சமீபத்திய முக சிக்னல்கள்')}
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-gray-700 rounded-lg p-4">
-                    <div className="text-sm text-gray-300">{t('Head Pose (Yaw)', 'தலை நிலை (Yaw)')}</div>
-                    <div className="text-2xl font-semibold text-cyan-300">
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <div className="text-sm text-gray-600">{t('Head Pose (Yaw)', 'தலை நிலை (Yaw)')}</div>
+                    <div className="text-2xl font-semibold text-cyan-600">
                       {faceMetrics?.headPoseAngle == null ? 'N/A' : `${faceMetrics.headPoseAngle.toFixed(0)}°`}
                     </div>
                   </div>
-                  <div className="bg-gray-700 rounded-lg p-4">
-                    <div className="text-sm text-gray-300">{t('Head Abnormal', 'தலை அசாதாரணம்')}</div>
-                    <div className="text-2xl font-semibold text-yellow-300">
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <div className="text-sm text-gray-600">{t('Head Abnormal', 'தலை அசாதாரணம்')}</div>
+                    <div className="text-2xl font-semibold text-yellow-600">
                       {statusLabel(faceMetrics?.headAbnormal, t('Abnormal', 'அசாதாரணம்'), t('Normal', 'சாதாரணம்'))}
                     </div>
                   </div>
-                  <div className="bg-gray-700 rounded-lg p-4">
-                    <div className="text-sm text-gray-300">{t('Gaze Oscillation', 'கண் அசைவு அதிர்வு')}</div>
-                    <div className="text-2xl font-semibold text-pink-300">
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <div className="text-sm text-gray-600">{t('Gaze Oscillation', 'கண் அசைவு அதிர்வு')}</div>
+                    <div className="text-2xl font-semibold text-pink-600">
                       {statusLabel(faceMetrics?.gazeOscillation, t('Detected', 'கண்டறியப்பட்டது'), t('Stable', 'நிலையானது'))}
                     </div>
                   </div>
@@ -497,40 +499,40 @@ const CombinedAnalysis = () => {
             </div>
 
             {/* Disease Risk Breakdown */}
-            <div className="bg-gray-800 rounded-lg p-8">
-              <h2 className="text-2xl font-bold mb-6">
+            <div className="bg-white rounded-lg p-8 shadow-sm border border-gray-200">
+              <h2 className="text-2xl font-bold mb-6 text-gray-900">
                 {t('Disease Risk Analysis', 'நோய் அபாய பகுப்பாய்வு')}
               </h2>
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Parkinson's */}
-                <div className="bg-gray-700 rounded-lg p-6">
+                <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
                   <div className="flex items-center mb-4">
-                    <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center mr-3">
-                      🧠
+                    <div className="w-12 h-12 bg-blue-100 text-blue-700 rounded-lg flex items-center justify-center mr-3 font-bold text-sm">
+                      PD
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold">Parkinson's Disease</h3>
-                      <p className="text-sm text-gray-400">Neurodegenerative disorder</p>
+                      <h3 className="text-lg font-semibold text-gray-900">Parkinson's Disease</h3>
+                      <p className="text-sm text-gray-500">Neurodegenerative disorder</p>
                     </div>
                   </div>
                   
                   <div className="space-y-3">
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-300">Facial Indicators:</span>
-                      <span className="text-blue-400 font-medium">
+                      <span className="text-gray-600">Facial Indicators:</span>
+                      <span className="text-blue-600 font-medium">
                         {combinedRisk.face == null ? 'N/A' : `${(combinedRisk.face * 0.6).toFixed(1)}%`}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-300">Voice Indicators:</span>
-                      <span className="text-purple-400 font-medium">
+                      <span className="text-gray-600">Voice Indicators:</span>
+                      <span className="text-purple-600 font-medium">
                         {combinedRisk.voice == null ? 'N/A' : `${(combinedRisk.voice * 0.4).toFixed(1)}%`}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-300">Combined Risk:</span>
-                      <span className="text-blue-400 font-bold">
+                      <span className="text-gray-600">Combined Risk:</span>
+                      <span className="text-blue-700 font-bold">
                         {combinedRisk.face == null || combinedRisk.voice == null ? 'N/A' : `${((combinedRisk.face * 0.6 + combinedRisk.voice * 0.4)).toFixed(1)}%`}
                       </span>
                     </div>
@@ -538,33 +540,33 @@ const CombinedAnalysis = () => {
                 </div>
 
                 {/* Alzheimer's */}
-                <div className="bg-gray-700 rounded-lg p-6">
+                <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
                   <div className="flex items-center mb-4">
-                    <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center mr-3">
-                      🧠
+                    <div className="w-12 h-12 bg-purple-100 text-purple-700 rounded-lg flex items-center justify-center mr-3 font-bold text-sm">
+                      AD
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold">Alzheimer's Disease</h3>
-                      <p className="text-sm text-gray-400">Cognitive decline</p>
+                      <h3 className="text-lg font-semibold text-gray-900">Alzheimer's Disease</h3>
+                      <p className="text-sm text-gray-500">Cognitive decline</p>
                     </div>
                   </div>
                   
                   <div className="space-y-3">
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-300">Facial Indicators:</span>
-                      <span className="text-blue-400 font-medium">
+                      <span className="text-gray-600">Facial Indicators:</span>
+                      <span className="text-blue-600 font-medium">
                         {combinedRisk.face == null ? 'N/A' : `${(combinedRisk.face * 0.5).toFixed(1)}%`}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-300">Voice Indicators:</span>
-                      <span className="text-purple-400 font-medium">
+                      <span className="text-gray-600">Voice Indicators:</span>
+                      <span className="text-purple-600 font-medium">
                         {combinedRisk.voice == null ? 'N/A' : `${(combinedRisk.voice * 0.5).toFixed(1)}%`}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-300">Combined Risk:</span>
-                      <span className="text-purple-400 font-bold">
+                      <span className="text-gray-600">Combined Risk:</span>
+                      <span className="text-purple-700 font-bold">
                         {combinedRisk.face == null || combinedRisk.voice == null ? 'N/A' : `${((combinedRisk.face * 0.5 + combinedRisk.voice * 0.5)).toFixed(1)}%`}
                       </span>
                     </div>
@@ -572,33 +574,33 @@ const CombinedAnalysis = () => {
                 </div>
 
                 {/* Depression */}
-                <div className="bg-gray-700 rounded-lg p-6">
+                <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
                   <div className="flex items-center mb-4">
-                    <div className="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center mr-3">
-                      🧠
+                    <div className="w-12 h-12 bg-green-100 text-green-700 rounded-lg flex items-center justify-center mr-3 font-bold text-sm">
+                      DP
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold">Depression</h3>
-                      <p className="text-sm text-gray-400">Mental health disorder</p>
+                      <h3 className="text-lg font-semibold text-gray-900">Depression</h3>
+                      <p className="text-sm text-gray-500">Mental health disorder</p>
                     </div>
                   </div>
                   
                   <div className="space-y-3">
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-300">Facial Indicators:</span>
-                      <span className="text-blue-400 font-medium">
+                      <span className="text-gray-600">Facial Indicators:</span>
+                      <span className="text-blue-600 font-medium">
                         {combinedRisk.face == null ? 'N/A' : `${(combinedRisk.face * 0.7).toFixed(1)}%`}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-300">Voice Indicators:</span>
-                      <span className="text-purple-400 font-medium">
+                      <span className="text-gray-600">Voice Indicators:</span>
+                      <span className="text-purple-600 font-medium">
                         {combinedRisk.voice == null ? 'N/A' : `${(combinedRisk.voice * 0.3).toFixed(1)}%`}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-300">Combined Risk:</span>
-                      <span className="text-green-400 font-bold">
+                      <span className="text-gray-600">Combined Risk:</span>
+                      <span className="text-green-700 font-bold">
                         {combinedRisk.face == null || combinedRisk.voice == null ? 'N/A' : `${((combinedRisk.face * 0.7 + combinedRisk.voice * 0.3)).toFixed(1)}%`}
                       </span>
                     </div>
@@ -608,47 +610,47 @@ const CombinedAnalysis = () => {
             </div>
 
             {/* Recommendations */}
-            <div className="bg-gray-800 rounded-lg p-8">
-              <h2 className="text-2xl font-bold mb-6">
+            <div className="bg-white rounded-lg p-8 shadow-sm border border-gray-200">
+              <h2 className="text-2xl font-bold mb-6 text-gray-900">
                 {t('Clinical Recommendations', 'மருத்துவ பரிந்துரைகள்')}
               </h2>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-gray-700 rounded-lg p-6">
-                  <h3 className="text-lg font-semibold mb-4 text-blue-400">
+                <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                  <h3 className="text-lg font-semibold mb-4 text-blue-600">
                     {t('Immediate Actions', 'உடனடி நடவடிக்கைகள்')}
                   </h3>
                   <ul className="space-y-2 text-sm">
                     <li className="flex items-start">
-                      <span className="text-green-400 mr-2">✓</span>
+                      <span className="text-green-600 mr-2 font-bold">-</span>
                       {t('Schedule comprehensive neurological evaluation', 'முழுமையான நரம்பியல் மதிப்பீட்டை திட்டமிடவும்')}
                     </li>
                     <li className="flex items-start">
-                      <span className="text-green-400 mr-2">✓</span>
+                      <span className="text-green-600 mr-2 font-bold">-</span>
                       {t('Begin baseline cognitive and motor function testing', 'அடிப்படை அறிவாற்றல் மற்றும் இயக்க செயல்பாட்டு பரிசோதனையை தொடங்கவும்')}
                     </li>
                     <li className="flex items-start">
-                      <span className="text-green-400 mr-2">✓</span>
+                      <span className="text-green-600 mr-2 font-bold">-</span>
                       {t('Consider referral to movement disorder specialist', 'இயக்கக் கோளாறு நிபுணரிடம் பரிந்துரையை பரிசீலிக்கவும்')}
                     </li>
                   </ul>
                 </div>
                 
-                <div className="bg-gray-700 rounded-lg p-6">
-                  <h3 className="text-lg font-semibold mb-4 text-purple-400">
+                <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                  <h3 className="text-lg font-semibold mb-4 text-purple-600">
                     {t('Monitoring Plan', 'கண்காணிப்பு திட்டம்')}
                   </h3>
                   <ul className="space-y-2 text-sm">
                     <li className="flex items-start">
-                      <span className="text-yellow-400 mr-2">•</span>
+                      <span className="text-yellow-600 mr-2">-</span>
                       {t('Weekly behavioral analysis tracking', 'வாராந்திர நடத்தை பகுப்பாய்வு கண்காணிப்பு')}
                     </li>
                     <li className="flex items-start">
-                      <span className="text-yellow-400 mr-2">•</span>
+                      <span className="text-yellow-600 mr-2">-</span>
                       {t('Monthly clinical assessment updates', 'மாதாந்திர மருத்துவ மதிப்பீட்டு புதுப்பிப்புகள்')}
                     </li>
                     <li className="flex items-start">
-                      <span className="text-yellow-400 mr-2">•</span>
+                      <span className="text-yellow-600 mr-2">-</span>
                       {t('Quarterly comprehensive evaluation', 'காலாண்டு முழுமையான மதிப்பீடு')}
                     </li>
                   </ul>
@@ -661,11 +663,11 @@ const CombinedAnalysis = () => {
 
         {activeTab === 'about' && (
           <div className="space-y-8">
-            <div className="bg-gray-800 rounded-lg p-8">
-              <h2 className="text-3xl font-bold mb-4 text-center">
+            <div className="bg-white rounded-lg p-8 shadow-sm border border-gray-200">
+              <h2 className="text-3xl font-bold mb-4 text-center text-gray-900">
                 {t('About the System', 'அமைப்பு பற்றி')}
               </h2>
-              <p className="text-gray-300 text-center max-w-3xl mx-auto">
+              <p className="text-gray-600 text-center max-w-3xl mx-auto">
                 {t(
                   'This system looks for early behavioral drift using face and voice signals to support preventive care.',
                   'இந்த அமைப்பு முகம் மற்றும் குரல் சிக்னல்களை பயன்படுத்தி ஆரம்ப மாற்றங்களை கண்டறிந்து முன்னெச்சரிக்கை பராமரிப்பை ஆதரிக்கிறது.'
@@ -673,17 +675,17 @@ const CombinedAnalysis = () => {
               </p>
             </div>
 
-            <div className="bg-gray-800 rounded-lg p-8">
-              <h3 className="text-2xl font-semibold mb-6">
+            <div className="bg-white rounded-lg p-8 shadow-sm border border-gray-200">
+              <h3 className="text-2xl font-semibold mb-6 text-gray-900">
                 {t('Diseases We Track', 'நாங்கள் கண்காணிக்கும் நோய்கள்')}
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {aboutDiseases.map((disease) => (
-                  <div key={disease.id} className="bg-gray-900 border border-gray-700 rounded-xl p-6">
-                    <h4 className="text-xl font-semibold mb-2">
+                  <div key={disease.id} className="bg-gray-50 border border-gray-200 rounded-xl p-6">
+                    <h4 className="text-xl font-semibold mb-2 text-gray-900">
                       {language === 'ta' ? disease.titleTa : disease.titleEn}
                     </h4>
-                    <p className="text-gray-400">
+                    <p className="text-gray-500">
                       {language === 'ta' ? disease.summaryTa : disease.summaryEn}
                     </p>
                   </div>
@@ -691,21 +693,21 @@ const CombinedAnalysis = () => {
               </div>
             </div>
 
-            <div className="bg-gray-800 rounded-lg p-8">
-              <h3 className="text-2xl font-semibold mb-4">
+            <div className="bg-white rounded-lg p-8 shadow-sm border border-gray-200">
+              <h3 className="text-2xl font-semibold mb-4 text-gray-900">
                 {t('How It Helps', 'இது எவ்வாறு உதவுகிறது')}
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-gray-300">
-                <div className="bg-gray-900 border border-gray-700 rounded-xl p-6">
-                  <h4 className="font-semibold mb-2">{t('Early Signals', 'ஆரம்ப அறிகுறிகள்')}</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-gray-600">
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-6">
+                  <h4 className="font-semibold mb-2 text-gray-900">{t('Early Signals', 'ஆரம்ப அறிகுறிகள்')}</h4>
                   <p>{t('Finds subtle changes before strong symptoms appear.', 'தெளிவான அறிகுறிகளுக்கு முன்பு சிறிய மாற்றங்களை கண்டறியும்.')}</p>
                 </div>
-                <div className="bg-gray-900 border border-gray-700 rounded-xl p-6">
-                  <h4 className="font-semibold mb-2">{t('Non-Invasive', 'எளிமையானது')}</h4>
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-6">
+                  <h4 className="font-semibold mb-2 text-gray-900">{t('Non-Invasive', 'எளிமையானது')}</h4>
                   <p>{t('Uses camera and microphone without medical procedures.', 'மருத்துவ செயல்முறைகள் இல்லாமல் கேமரா, மைக்ரோஃபோன் பயன்படுத்துகிறது.')}</p>
                 </div>
-                <div className="bg-gray-900 border border-gray-700 rounded-xl p-6">
-                  <h4 className="font-semibold mb-2">{t('Continuous Tracking', 'தொடர்ந்த கண்காணிப்பு')}</h4>
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-6">
+                  <h4 className="font-semibold mb-2 text-gray-900">{t('Continuous Tracking', 'தொடர்ந்த கண்காணிப்பு')}</h4>
                   <p>{t('Tracks trends over time for better insights.', 'காலப்போக்கில் மாற்றங்களை கண்காணித்து தெளிவு அளிக்கும்.')}</p>
                 </div>
               </div>
